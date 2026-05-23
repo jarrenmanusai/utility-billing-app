@@ -58,6 +58,7 @@ const MAPPING = {
   "exclamationmark.triangle.fill": "warning",
   "exclamationmark.circle.fill": "error",
   "info.circle.fill": "info",
+  "info.circle": "info-outline",
   "questionmark.circle.fill": "help",
   "calendar": "calendar-today",
   "clock.fill": "schedule",

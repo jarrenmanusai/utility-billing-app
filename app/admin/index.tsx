@@ -617,6 +617,12 @@ function ProfileTab() {
         <Text className="text-base text-foreground">Admin (owner)</Text>
       </Card>
       <Button
+        title="About app"
+        icon="info.circle"
+        variant="secondary"
+        onPress={() => router.push("/about")}
+      />
+      <Button
         title="Sign out"
         icon="power"
         variant="danger"

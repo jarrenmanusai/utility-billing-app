@@ -127,3 +127,9 @@
 - [x] Replace per-item utility picker with a dropdown menu (label + default rate shown)
 - [x] When there are no utility types, Add Item button toasts + redirects to Utilities; empty state inside the items list also shows a Go to Utilities button
 - [x] Bump app version to 1.0.4
+
+## User Feedback — Round 8 (Versioning + About)
+- [x] Renumber version from 1.0.12 → 1.1.2 (cap minor at 1.0.9 then roll to 1.1.0)
+- [x] Create About App screen showing app version, build, credits to John Warren Perez
+- [x] Link About from each role's Profile tab (Landlord, Tenant, Admin)
+- [x] Expose version centrally via Constants.expoConfig.version (reads from app.config.ts)

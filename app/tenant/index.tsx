@@ -180,6 +180,12 @@ function ProfileTab() {
         To change your password, ask your landlord or admin to issue a reset link.
       </Text>
       <Button
+        title="About app"
+        icon="info.circle"
+        variant="secondary"
+        onPress={() => router.push("/about")}
+      />
+      <Button
         title="Sign out"
         icon="power"
         variant="danger"
