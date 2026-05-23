@@ -244,11 +244,26 @@ export async function getBill(id: number) {
 
 export async function listBillsByLandlord(landlordId: number) {
   const db = await requireDb();
-  return db
-    .select()
+  const rows = await db
+    .select({
+      id: bills.id,
+      landlordId: bills.landlordId,
+      tenantId: bills.tenantId,
+      status: bills.status,
+      totalAmount: bills.totalAmount,
+      dueDate: bills.dueDate,
+      meterPhotoUrl: bills.meterPhotoUrl,
+      notes: bills.notes,
+      createdAt: bills.createdAt,
+      paidAt: bills.paidAt,
+      tenantName: users.name,
+      tenantEmail: users.email,
+    })
     .from(bills)
+    .leftJoin(users, eq(users.id, bills.tenantId))
     .where(eq(bills.landlordId, landlordId))
     .orderBy(desc(bills.createdAt));
+  return rows;
 }
 
 export async function listBillsByTenant(tenantId: number) {

@@ -9,7 +9,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
-import { formatPHP, formatDate, relativeTime } from "@/lib/format";
+import { formatPHP, formatDate, formatBillPeriod, relativeTime } from "@/lib/format";
 
 type TabKey = "home" | "bills" | "tenants" | "chat" | "profile";
 
@@ -106,12 +106,14 @@ function HomeTab() {
 
       <Text className="text-base font-semibold text-foreground mt-2">Recent bills</Text>
       {stats.data?.recentBills?.length ? (
-        stats.data.recentBills.map((b) => (
+        stats.data.recentBills.map((b: any) => (
           <Card key={b.id} onPress={() => router.push({ pathname: "/landlord/bills/[id]", params: { id: String(b.id) } })}>
             <View className="flex-row items-center justify-between">
               <View className="flex-1">
-                <Text className="text-base font-semibold text-foreground">Bill #{b.id}</Text>
-                <Text className="text-xs text-muted">{formatDate(b.createdAt)}</Text>
+                <Text className="text-base font-semibold text-foreground" numberOfLines={1}>
+                  {b.tenantName || b.tenantEmail || `Tenant #${b.tenantId}`}
+                </Text>
+                <Text className="text-xs text-muted">{formatBillPeriod(b.createdAt)} · #{b.id}</Text>
               </View>
               <View className="items-end gap-1">
                 <Text className="text-base font-semibold text-foreground">{formatPHP(b.totalAmount)}</Text>
@@ -181,8 +183,10 @@ function BillsTab() {
           <Card onPress={() => router.push({ pathname: "/landlord/bills/[id]", params: { id: String(item.id) } })}>
             <View className="flex-row items-center justify-between">
               <View className="flex-1">
-                <Text className="text-base font-semibold text-foreground">Bill #{item.id}</Text>
-                <Text className="text-xs text-muted">{formatDate(item.createdAt)}</Text>
+                <Text className="text-base font-semibold text-foreground" numberOfLines={1}>
+                  {(item as any).tenantName || (item as any).tenantEmail || `Tenant #${item.tenantId}`}
+                </Text>
+                <Text className="text-xs text-muted">{formatBillPeriod(item.createdAt)} · #{item.id}</Text>
                 {item.dueDate ? (
                   <Text className="text-xs text-muted">Due {formatDate(item.dueDate)}</Text>
                 ) : null}

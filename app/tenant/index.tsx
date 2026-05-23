@@ -9,7 +9,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
-import { formatPHP, formatDate, relativeTime } from "@/lib/format";
+import { formatPHP, formatDate, formatBillPeriod, relativeTime } from "@/lib/format";
 
 type TabKey = "bills" | "chat" | "notif" | "profile";
 
@@ -81,8 +81,10 @@ function BillsTab() {
           <Card onPress={() => router.push({ pathname: "/tenant/bills/[id]", params: { id: String(item.id) } })}>
             <View className="flex-row items-center justify-between">
               <View className="flex-1">
-                <Text className="text-base font-semibold text-foreground">Bill #{item.id}</Text>
-                <Text className="text-xs text-muted">{formatDate(item.deployedAt ?? item.createdAt)}</Text>
+                <Text className="text-base font-semibold text-foreground" numberOfLines={1}>
+                  {formatBillPeriod(item.deployedAt ?? item.createdAt)} bill
+                </Text>
+                <Text className="text-xs text-muted">Issued {formatDate(item.deployedAt ?? item.createdAt)} · #{item.id}</Text>
                 {item.dueDate ? (
                   <Text className="text-xs text-muted">Due {formatDate(item.dueDate)}</Text>
                 ) : null}

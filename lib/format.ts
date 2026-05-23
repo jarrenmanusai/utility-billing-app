@@ -62,3 +62,14 @@ export function relativeTime(value: Date | string | null | undefined): string {
   if (day < 7) return `${day}d ago`;
   return formatDate(d);
 }
+
+/**
+ * Render a bill's billing period as a human-friendly month label, e.g. "May 2026".
+ * Falls back to the formatted date if the value cannot be parsed.
+ */
+export function formatBillPeriod(value: Date | string | null | undefined): string {
+  if (!value) return "—";
+  const d = typeof value === "string" ? new Date(value) : value;
+  if (!(d instanceof Date) || isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-PH", { year: "numeric", month: "long" });
+}
