@@ -133,3 +133,9 @@
 - [x] Create About App screen showing app version, build, credits to John Warren Perez
 - [x] Link About from each role's Profile tab (Landlord, Tenant, Admin)
 - [x] Expose version centrally via Constants.expoConfig.version (reads from app.config.ts)
+
+## User Feedback — Round 9 (Branding + Version)
+- [x] Rename product from UtilityBill to UtilityFlow across all screens
+- [x] Single source-of-truth version constant (constants/app-version.ts) read by About + headers
+- [x] Bump version to 1.1.3 and keep app.config.ts in sync (guarded by vitest)
+- [x] About screen reads APP_VERSION dynamically so display is always accurate after deploy

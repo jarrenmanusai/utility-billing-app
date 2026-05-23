@@ -36,7 +36,7 @@ export default function AdminConsole() {
             style={{ width: 32, height: 32, borderRadius: 8 }}
           />
           <View>
-            <Text className="text-base font-bold text-foreground">UtilityBill</Text>
+            <Text className="text-base font-bold text-foreground">UtilityFlow</Text>
             <Text className="text-xs text-muted">Admin · {user?.name ?? user?.email}</Text>
           </View>
         </View>

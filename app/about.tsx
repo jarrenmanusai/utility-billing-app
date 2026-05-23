@@ -1,4 +1,3 @@
-import Constants from "expo-constants";
 import { Image, Linking, ScrollView, Text, View } from "react-native";
 import { router, Stack } from "expo-router";
 
@@ -6,15 +5,15 @@ import { ScreenContainer } from "@/components/screen-container";
 import { Button, Card } from "@/components/ui/primitives";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
+import { APP_AUTHOR, APP_NAME, APP_TAGLINE, APP_VERSION } from "@/constants/app-version";
 
 /**
  * About screen — accessible from every role's Profile tab.
- * Displays app version (read from app.config.ts via Constants), credits, and resource links.
+ * Reads from the single-source-of-truth constants in constants/app-version.ts so
+ * the displayed version is always accurate after each deploy.
  */
 export default function AboutScreen() {
   const colors = useColors();
-  const version = Constants.expoConfig?.version ?? "—";
-  const appName = Constants.expoConfig?.name ?? "UtilityBill";
 
   return (
     <ScreenContainer edges={["top", "left", "right"]}>
@@ -40,8 +39,8 @@ export default function AboutScreen() {
               style={{ width: 80, height: 80, borderRadius: 18 }}
             />
             <View className="items-center">
-              <Text className="text-2xl font-bold text-foreground">{appName}</Text>
-              <Text className="text-sm text-muted mt-1">Smart Utility Billing for Landlords</Text>
+              <Text className="text-2xl font-bold text-foreground">{APP_NAME}</Text>
+              <Text className="text-sm text-muted mt-1">{APP_TAGLINE}</Text>
             </View>
             <View
               style={{
@@ -52,7 +51,7 @@ export default function AboutScreen() {
               }}
             >
               <Text style={{ color: colors.tint, fontSize: 13, fontWeight: "600" }}>
-                Version {version}
+                Version {APP_VERSION}
               </Text>
             </View>
           </View>
@@ -86,7 +85,7 @@ export default function AboutScreen() {
             >
               <Text style={{ color: colors.tint, fontSize: 24, fontWeight: "700" }}>JW</Text>
             </View>
-            <Text className="text-lg font-bold text-foreground">John Warren Perez</Text>
+            <Text className="text-lg font-bold text-foreground">{APP_AUTHOR}</Text>
             <Text className="text-sm text-muted">Creator & Lead Designer</Text>
           </View>
         </Card>
@@ -111,13 +110,13 @@ export default function AboutScreen() {
               title="Contact support"
               icon="paperplane.fill"
               variant="secondary"
-              onPress={() => Linking.openURL("mailto:support@utilitybill.app")}
+              onPress={() => Linking.openURL("mailto:support@utilityflow.app")}
             />
           </View>
         </Card>
 
         <Text className="text-xs text-muted text-center py-4">
-          © 2026 UtilityBill · Made with care in the Philippines
+          © 2026 {APP_NAME} · Made with care in the Philippines
         </Text>
       </ScrollView>
     </ScreenContainer>

@@ -27,7 +27,7 @@ export default function IndexScreen() {
           source={require("@/assets/images/icon.png")}
           style={{ width: 88, height: 88, borderRadius: 20 }}
         />
-        <Text className="text-2xl font-bold text-foreground">UtilityBill</Text>
+        <Text className="text-2xl font-bold text-foreground">UtilityFlow</Text>
         <ActivityIndicator />
       </View>
     </ScreenContainer>

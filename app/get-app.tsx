@@ -18,7 +18,7 @@ export default function GetAppScreen() {
             source={require("@/assets/images/icon.png")}
             style={{ width: 96, height: 96, borderRadius: 22 }}
           />
-          <Text className="text-2xl font-bold text-foreground mt-3">UtilityBill</Text>
+          <Text className="text-2xl font-bold text-foreground mt-3">UtilityFlow</Text>
           <Text className="text-sm text-muted text-center mt-1">
             Smart utility billing for landlords and tenants.
           </Text>
