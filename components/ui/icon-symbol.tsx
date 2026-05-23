@@ -5,7 +5,7 @@ import { SymbolWeight, SymbolViewProps } from "expo-symbols";
 import { ComponentProps } from "react";
 import { OpaqueColorValue, type StyleProp, type TextStyle } from "react-native";
 
-type IconMapping = Record<SymbolViewProps["name"], ComponentProps<typeof MaterialIcons>["name"]>;
+type IconMapping = Record<string, ComponentProps<typeof MaterialIcons>["name"]>;
 type IconSymbolName = keyof typeof MAPPING;
 
 /**
@@ -18,7 +18,61 @@ const MAPPING = {
   "paperplane.fill": "send",
   "chevron.left.forwardslash.chevron.right": "code",
   "chevron.right": "chevron-right",
-} as IconMapping;
+  "chevron.left": "chevron-left",
+  "person.fill": "person",
+  "person.2.fill": "people",
+  "bolt.fill": "bolt",
+  "doc.text.fill": "description",
+  "bell.fill": "notifications",
+  "bubble.left.and.bubble.right.fill": "chat",
+  "gearshape.fill": "settings",
+  "camera.fill": "camera-alt",
+  "photo.fill": "photo",
+  "plus": "add",
+  "trash.fill": "delete",
+  "pencil": "edit",
+  "checkmark": "check",
+  "checkmark.circle.fill": "check-circle",
+  "xmark": "close",
+  "xmark.circle.fill": "cancel",
+  "arrow.right": "arrow-forward",
+  "arrow.left": "arrow-back",
+  "arrow.up.circle.fill": "arrow-circle-up",
+  "arrow.down.circle.fill": "arrow-circle-down",
+  "arrow.clockwise": "refresh",
+  "square.and.arrow.up": "file-upload",
+  "square.and.arrow.down": "file-download",
+  "creditcard.fill": "payment",
+  "chart.bar.fill": "bar-chart",
+  "shield.fill": "security",
+  "shield.lefthalf.filled": "admin-panel-settings",
+  "lock.fill": "lock",
+  "key.fill": "vpn-key",
+  "envelope.fill": "email",
+  "moon.fill": "dark-mode",
+  "sun.max.fill": "light-mode",
+  "power": "power-settings-new",
+  "eye.fill": "visibility",
+  "eye.slash.fill": "visibility-off",
+  "sparkles": "auto-awesome",
+  "exclamationmark.triangle.fill": "warning",
+  "info.circle.fill": "info",
+  "questionmark.circle.fill": "help",
+  "calendar": "calendar-today",
+  "clock.fill": "schedule",
+  "magnifyingglass": "search",
+  "line.3.horizontal": "menu",
+  "ellipsis": "more-horiz",
+  "banknote": "account-balance-wallet",
+  "arrow.up.tray": "upload-file",
+  "square.grid.2x2.fill": "grid-view",
+  "rectangle.stack.fill": "layers",
+  "hammer.fill": "build",
+  "paperclip": "attach-file",
+  "arrow.down.app.fill": "download",
+  "arrow.up.app.fill": "upload",
+  "hourglass": "hourglass-empty",
+} satisfies IconMapping;
 
 /**
  * An icon component that uses native SF Symbols on iOS, and Material Icons on Android and web.

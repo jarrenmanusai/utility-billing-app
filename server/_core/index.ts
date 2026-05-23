@@ -7,6 +7,8 @@ import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
+import { storagePut } from "../storage";
+import { verifyAppToken } from "../auth";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -62,6 +64,38 @@ async function startServer() {
     res.json({ ok: true, timestamp: Date.now() });
   });
 
+  // Simple image upload endpoint - accepts multipart/form-data with `file` and optional `folder`.
+  app.post("/api/upload", express.raw({ type: "multipart/form-data", limit: "25mb" }), async (req, res) => {
+    try {
+      const auth = req.headers.authorization;
+      if (!auth?.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const payload = await verifyAppToken(auth.slice(7));
+      if (!payload) return res.status(401).json({ error: "Unauthorized" });
+
+      const contentType = req.headers["content-type"] || "";
+      const boundaryMatch = /boundary=([^;]+)/.exec(contentType);
+      if (!boundaryMatch) return res.status(400).json({ error: "Missing boundary" });
+      const boundary = boundaryMatch[1].trim();
+
+      const raw: Buffer = req.body as Buffer;
+      const parts = parseMultipart(raw, boundary);
+      const filePart = parts.find((p) => p.name === "file");
+      const folderPart = parts.find((p) => p.name === "folder");
+      if (!filePart || !filePart.data) return res.status(400).json({ error: "Missing file" });
+      const folder = (folderPart?.value || "uploads").replace(/[^a-zA-Z0-9_/-]/g, "");
+      const filename = (filePart.filename || `upload-${Date.now()}.bin`).replace(/[^a-zA-Z0-9._-]/g, "_");
+      const key = `${folder}/${payload.userId}/${Date.now()}-${filename}`;
+      const ct = filePart.contentType || "application/octet-stream";
+      const result = await storagePut(key, filePart.data, ct);
+      return res.json({ url: result.url, key: result.key });
+    } catch (err) {
+      console.error("[upload] failed", err);
+      return res.status(500).json({ error: "Upload failed" });
+    }
+  });
+
   app.use(
     "/api/trpc",
     createExpressMiddleware({
@@ -83,3 +117,46 @@ async function startServer() {
 }
 
 startServer().catch(console.error);
+
+type MultipartPart = {
+  name: string;
+  filename?: string;
+  contentType?: string;
+  value?: string;
+  data?: Buffer;
+};
+
+function parseMultipart(buf: Buffer, boundary: string): MultipartPart[] {
+  const parts: MultipartPart[] = [];
+  const dashBoundary = Buffer.from(`--${boundary}`);
+  const crlf = Buffer.from("\r\n");
+  let start = buf.indexOf(dashBoundary);
+  if (start < 0) return parts;
+  start += dashBoundary.length;
+  while (start < buf.length) {
+    if (buf[start] === 0x2d && buf[start + 1] === 0x2d) break; // trailing --
+    if (buf[start] === 0x0d) start += 2; // skip CRLF after boundary
+    const headerEnd = buf.indexOf(Buffer.from("\r\n\r\n"), start);
+    if (headerEnd < 0) break;
+    const headerStr = buf.slice(start, headerEnd).toString("utf8");
+    const nextBoundary = buf.indexOf(dashBoundary, headerEnd);
+    if (nextBoundary < 0) break;
+    const dataStart = headerEnd + 4;
+    const dataEnd = nextBoundary - 2; // strip preceding CRLF
+    const data = buf.slice(dataStart, dataEnd);
+
+    const disposition = /content-disposition:.*name="([^"]+)"(?:; filename="([^"]*)")?/i.exec(headerStr);
+    const typeMatch = /content-type:\s*([^\r\n]+)/i.exec(headerStr);
+    if (disposition) {
+      const name = disposition[1];
+      const filename = disposition[2];
+      if (filename !== undefined) {
+        parts.push({ name, filename, contentType: typeMatch?.[1], data });
+      } else {
+        parts.push({ name, value: data.toString("utf8") });
+      }
+    }
+    start = nextBoundary + dashBoundary.length;
+  }
+  return parts;
+}

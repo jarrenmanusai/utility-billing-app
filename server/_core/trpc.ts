@@ -43,3 +43,23 @@ export const adminProcedure = t.procedure.use(
     });
   }),
 );
+
+export const landlordProcedure = t.procedure.use(
+  t.middleware(async (opts) => {
+    const { ctx, next } = opts;
+    if (!ctx.user || ctx.user.role !== "landlord" || ctx.user.status !== "active") {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Landlord access required" });
+    }
+    return next({ ctx: { ...ctx, user: ctx.user } });
+  }),
+);
+
+export const tenantProcedure = t.procedure.use(
+  t.middleware(async (opts) => {
+    const { ctx, next } = opts;
+    if (!ctx.user || ctx.user.role !== "tenant" || ctx.user.status !== "active") {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Tenant access required" });
+    }
+    return next({ ctx: { ...ctx, user: ctx.user } });
+  }),
+);
