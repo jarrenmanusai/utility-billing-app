@@ -339,7 +339,7 @@ export function Dropdown({
               </Pressable>
             </View>
             <ScrollView contentContainerStyle={{ padding: 8 }}>
-              {options.map((opt) => {
+              {options.map((opt, optIdx) => {
                 const isSelected = opt.value === value;
                 return (
                   <Pressable
@@ -348,26 +348,39 @@ export function Dropdown({
                       onChange(opt.value);
                       setOpen(false);
                     }}
-                    style={({ pressed }) => [pressed && { opacity: 0.7 }]}
-                    className={cn(
-                      "flex-row items-center rounded-xl px-3 py-3 mb-1 gap-3",
-                      isSelected ? "bg-primary/10" : "bg-transparent",
-                    )}
+                    style={({ pressed }) => [
+                      {
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        paddingHorizontal: 14,
+                        paddingVertical: 14,
+                        borderRadius: 12,
+                        marginTop: optIdx === 0 ? 0 : 8,
+                        backgroundColor: isSelected ? "rgba(13, 148, 136, 0.10)" : "transparent",
+                        minHeight: 52,
+                      },
+                      pressed && { opacity: 0.6 },
+                    ]}
                   >
-                    <View style={{ flex: 1, minWidth: 0 }}>
+                    <View style={{ flex: 1, minWidth: 0, paddingRight: 12 }}>
                       <Text
-                        className={cn("text-base font-semibold", isSelected ? "text-primary" : "text-foreground")}
+                        style={{
+                          fontSize: 16,
+                          fontWeight: "600",
+                          color: isSelected ? colors.tint : colors.text,
+                        }}
                         numberOfLines={1}
                       >
                         {opt.label}
                       </Text>
                       {opt.sublabel ? (
-                        <Text className="text-xs text-muted mt-0.5" numberOfLines={1}>
+                        <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }} numberOfLines={1}>
                           {opt.sublabel}
                         </Text>
                       ) : null}
                     </View>
-                    <View style={{ width: 22, alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <View style={{ width: 24, alignItems: "center", justifyContent: "center" }}>
                       {isSelected ? (
                         <IconSymbol name="checkmark.circle.fill" size={22} color={colors.tint} />
                       ) : null}
