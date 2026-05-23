@@ -235,7 +235,17 @@ function TenantsTab() {
                 <Text className="text-base font-semibold text-foreground">{item.name ?? "—"}</Text>
                 <Text className="text-xs text-muted">{item.email}</Text>
               </View>
-              <StatusBadge status={item.status} />
+              <View className="flex-row items-center gap-2">
+                <StatusBadge status={item.status} />
+                <Button
+                  title="Bill"
+                  icon="doc.text.fill"
+                  variant="secondary"
+                  onPress={() =>
+                    router.push({ pathname: "/landlord/bills/new", params: { tenantId: String(item.id) } })
+                  }
+                />
+              </View>
             </View>
           </Card>
         )}

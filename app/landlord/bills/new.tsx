@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
 import { ScreenContainer } from "@/components/screen-container";
@@ -10,13 +10,13 @@ import { trpc } from "@/lib/trpc";
 import { formatPHP, parseNumber } from "@/lib/format";
 import { pickImage, uploadImage } from "@/lib/upload";
 import { getApiBaseUrl } from "@/constants/oauth";
+import { useConfirm, useToast } from "@/components/feedback";
 
 type LineItem = {
   utilityId: number | null;
   previousReading: string;
   currentReading: string;
   rate: string;
-  // A1: prefilled state
   prefilled: boolean;
 };
 
@@ -25,6 +25,8 @@ export default function NewBillScreen() {
   const editId = params.id ? Number(params.id) : undefined;
   const utils = trpc.useUtils();
   const colors = useColors();
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const tenants = trpc.landlord.tenants.list.useQuery();
   const utilities = trpc.landlord.utilities.list.useQuery();
@@ -57,17 +59,14 @@ export default function NewBillScreen() {
     }
   }, [existing.data]);
 
-  // A2: when tenant changes, reset previousReading per item (keep current + rate)
+  // A2: when tenant changes (non-edit mode), reset previous readings so A1 can re-fill
   useEffect(() => {
     if (!editId) {
-      setItems((prev) =>
-        prev.map((it) => ({ ...it, previousReading: "", prefilled: false })),
-      );
+      setItems((prev) => prev.map((it) => ({ ...it, previousReading: "", prefilled: false })));
     }
-  }, [tenantId]);
+  }, [tenantId, editId]);
 
   const ocrMutation = trpc.landlord.bills.ocrMeter.useMutation();
-
   const previousReadingQuery = trpc.useUtils().landlord.bills.previousReading;
 
   const fetchPrevForItem = async (idx: number, utilityId: number) => {
@@ -75,7 +74,6 @@ export default function NewBillScreen() {
     try {
       const data = await previousReadingQuery.fetch({ tenantId, utilityId });
       if (data?.previousReading !== null && data?.previousReading !== undefined) {
-        // A1: only set if user hasn't already typed something
         setItems((prev) =>
           prev.map((it, i) =>
             i === idx && !it.previousReading
@@ -101,7 +99,6 @@ export default function NewBillScreen() {
       prefilled: false,
     };
     setItems((prev) => [...prev, newItem]);
-    // Trigger A1 prev-fetch
     if (tenantId && firstUtility) {
       setTimeout(() => fetchPrevForItem(items.length, firstUtility.id), 0);
     }
@@ -109,7 +106,7 @@ export default function NewBillScreen() {
 
   const removeItem = (idx: number) => setItems((prev) => prev.filter((_, i) => i !== idx));
 
-  // Live computed values (A3, A5, A6)
+  // A3/A5/A6 live math
   const computed = useMemo(() => {
     const rows = items.map((it) => {
       const prev = parseNumber(it.previousReading);
@@ -124,27 +121,40 @@ export default function NewBillScreen() {
   }, [items]);
 
   const save = trpc.landlord.bills.save.useMutation({
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       utils.landlord.bills.list.invalidate();
       utils.landlord.stats.invalidate();
+      toast(
+        variables.status === "deployed" ? "Bill deployed to tenant" : "Draft saved",
+        { variant: "success" },
+      );
       router.back();
     },
-    onError: (err) => Alert.alert("Save failed", err.message),
+    onError: (err) => toast(err.message ?? "Save failed", { variant: "error" }),
   });
 
   const submit = async (status: "draft" | "deployed") => {
-    if (!tenantId) return Alert.alert("Missing tenant", "Please choose a tenant.");
-    if (items.length === 0) return Alert.alert("No items", "Add at least one bill item.");
+    if (!tenantId) {
+      toast("Please choose a tenant before saving", { variant: "error" });
+      return;
+    }
+    if (items.length === 0) {
+      toast("Add at least one bill item", { variant: "error" });
+      return;
+    }
     const invalid = items.find((it) => !it.utilityId || !it.currentReading || !it.rate);
-    if (invalid) return Alert.alert("Incomplete item", "Please fill utility, current reading, and rate for each item.");
+    if (invalid) {
+      toast("Each item needs a utility, current reading, and rate", { variant: "error", duration: 3500 });
+      return;
+    }
 
     if (status === "deployed") {
-      const ok = await new Promise<boolean>((res) =>
-        Alert.alert("Deploy bill?", `This will notify the tenant of a ${formatPHP(computed.total)} bill.`, [
-          { text: "Cancel", style: "cancel", onPress: () => res(false) },
-          { text: "Deploy", onPress: () => res(true) },
-        ]),
-      );
+      const ok = await confirm({
+        title: "Deploy bill?",
+        message: `This will notify the tenant of a ${formatPHP(computed.total)} bill. They will be able to view and pay it immediately.`,
+        confirmLabel: "Deploy",
+        icon: "paperplane.fill",
+      });
       if (!ok) return;
     }
 
@@ -171,11 +181,9 @@ export default function NewBillScreen() {
     try {
       const url = await uploadImage(uri, "meter-photos");
       setMeterPhotoUrl(url);
-      // A8: auto-OCR
       const fullUrl = url.startsWith("/") ? `${getApiBaseUrl()}${url}` : url;
       const result = await ocrMutation.mutateAsync({ imageUrl: fullUrl });
       setOcr(result);
-      // If we have an active item and OCR returned a reading, suggest it for current reading
       if (result.reading != null && items.length > 0) {
         setItems((prev) =>
           prev.map((it, i) =>
@@ -184,44 +192,65 @@ export default function NewBillScreen() {
               : it,
           ),
         );
+        toast(`Meter read: ${result.reading} (${result.confidence})`, { variant: "success" });
       }
     } catch (err: any) {
-      // A9
-      Alert.alert("Couldn't read meter", err?.message ?? "Try again or enter the reading manually.");
+      toast(err?.message ?? "Couldn't read meter — enter manually", { variant: "error", duration: 3500 });
     } finally {
       setUploading(false);
     }
   };
+
+  const tenantList = tenants.data ?? [];
+  const utilityList = utilities.data ?? [];
+  const selectedTenant = tenantList.find((t) => t.id === tenantId);
 
   return (
     <ScreenContainer edges={["top", "bottom", "left", "right"]}>
       <ScreenHeader title={editId ? "Edit bill" : "New bill"} onBack={() => router.back()} />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
-          {/* Tenant selector */}
+          {/* Tenant selector — vertical list, always visible */}
           <Card>
-            <Text className="text-sm font-medium text-foreground mb-2">Tenant</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-              {(tenants.data ?? []).map((t) => (
-                <Pressable
-                  key={t.id}
-                  onPress={() => setTenantId(t.id)}
-                  className={`px-3 py-2 rounded-full border ${tenantId === t.id ? "bg-primary border-primary" : "bg-surface border-border"}`}
-                >
-                  <Text className={tenantId === t.id ? "text-white text-sm font-semibold" : "text-foreground text-sm"}>
-                    {t.name ?? t.email}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-            {(tenants.data ?? []).length === 0 ? (
-              <Text className="text-xs text-muted mt-2">No tenants yet — add one first.</Text>
-            ) : null}
+            <Text className="text-sm font-semibold text-foreground mb-2">
+              Tenant {selectedTenant ? `· ${selectedTenant.name ?? selectedTenant.email}` : ""}
+            </Text>
+            {tenantList.length === 0 ? (
+              <Text className="text-xs text-muted">No tenants yet. Go to Tenants tab and add one first.</Text>
+            ) : (
+              <View className="gap-1.5">
+                {tenantList.map((t) => {
+                  const selected = tenantId === t.id;
+                  return (
+                    <Pressable
+                      key={t.id}
+                      onPress={() => setTenantId(t.id)}
+                      style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+                      className={`flex-row items-center justify-between rounded-xl border px-3 py-2.5 ${
+                        selected ? "bg-primary/10 border-primary" : "bg-surface border-border"
+                      }`}
+                    >
+                      <View className="flex-1">
+                        <Text className={`text-sm font-semibold ${selected ? "text-primary" : "text-foreground"}`}>
+                          {t.name ?? t.email}
+                        </Text>
+                        <Text className="text-xs text-muted">{t.email}</Text>
+                      </View>
+                      {selected ? (
+                        <IconSymbol name="checkmark.circle.fill" size={22} color={colors.tint} />
+                      ) : (
+                        <View className="w-5 h-5 rounded-full border border-border" />
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
           </Card>
 
           {/* Meter photo + OCR */}
           <Card>
-            <Text className="text-sm font-medium text-foreground mb-2">Meter / Reference photo</Text>
+            <Text className="text-sm font-semibold text-foreground mb-2">Meter / Reference photo</Text>
             {meterPhotoUrl ? (
               <Image
                 source={{ uri: meterPhotoUrl.startsWith("/") ? `${getApiBaseUrl()}${meterPhotoUrl}` : meterPhotoUrl }}
@@ -251,47 +280,73 @@ export default function NewBillScreen() {
           <View>
             <View className="flex-row items-center justify-between mb-2">
               <Text className="text-base font-semibold text-foreground">Bill items</Text>
-              <Button title="Add" icon="plus" variant="secondary" onPress={addItem} />
+              <Button
+                title="Add item"
+                icon="plus"
+                variant="secondary"
+                onPress={() => {
+                  if (utilityList.length === 0) {
+                    toast("Add a utility type first (Utilities tab)", { variant: "error", duration: 3500 });
+                    return;
+                  }
+                  addItem();
+                }}
+              />
             </View>
             {items.length === 0 ? (
               <Card>
-                <Text className="text-sm text-muted">Tap "Add" above to start charging for a utility.</Text>
+                <Text className="text-sm text-muted">
+                  Tap &quot;Add item&quot; above to charge for a utility (e.g. Electricity, Water).
+                </Text>
               </Card>
             ) : null}
             {items.map((it, idx) => {
-              const utility = utilities.data?.find((u) => u.id === it.utilityId);
+              const utility = utilityList.find((u) => u.id === it.utilityId);
               const c = computed.rows[idx];
               return (
                 <Card key={idx} className="mb-2">
                   <View className="flex-row items-center justify-between mb-2">
-                    <Text className="text-sm font-semibold text-foreground">Item {idx + 1}</Text>
+                    <Text className="text-sm font-semibold text-foreground">
+                      Item {idx + 1}
+                      {utility ? ` · ${utility.name}` : ""}
+                    </Text>
                     <Pressable hitSlop={8} onPress={() => removeItem(idx)}>
                       <IconSymbol name="trash.fill" size={18} color={colors.error} />
                     </Pressable>
                   </View>
 
-                  {/* Utility selector */}
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                    {(utilities.data ?? []).map((u) => (
-                      <Pressable
-                        key={u.id}
-                        onPress={() => {
-                          updateItem(idx, { utilityId: u.id, rate: String(u.defaultRate) });
-                          fetchPrevForItem(idx, u.id);
-                        }}
-                        className={`px-3 py-1.5 rounded-full border ${it.utilityId === u.id ? "bg-primary border-primary" : "bg-surface border-border"}`}
-                      >
-                        <Text className={it.utilityId === u.id ? "text-white text-xs font-semibold" : "text-foreground text-xs"}>
-                          {u.name}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
-                  {(utilities.data ?? []).length === 0 ? (
-                    <Text className="text-xs text-muted mt-1">No utility types — add one first.</Text>
-                  ) : null}
+                  {/* Utility picker — explicit list */}
+                  <Text className="text-xs font-medium text-muted mb-1.5">Utility type</Text>
+                  {utilityList.length === 0 ? (
+                    <Text className="text-xs text-muted mb-2">
+                      No utility types yet. Add one in the Utilities tab.
+                    </Text>
+                  ) : (
+                    <View className="flex-row flex-wrap gap-1.5 mb-2">
+                      {utilityList.map((u) => {
+                        const selected = it.utilityId === u.id;
+                        return (
+                          <Pressable
+                            key={u.id}
+                            onPress={() => {
+                              updateItem(idx, { utilityId: u.id, rate: String(u.defaultRate) });
+                              fetchPrevForItem(idx, u.id);
+                            }}
+                            style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+                            className={`px-3 py-1.5 rounded-full border ${
+                              selected ? "bg-primary border-primary" : "bg-surface border-border"
+                            }`}
+                          >
+                            <Text className={`text-xs font-semibold ${selected ? "text-white" : "text-foreground"}`}>
+                              {u.name} ({u.unit})
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  )}
 
-                  <View className="flex-row gap-2 mt-3">
+                  <View className="flex-row gap-2 mt-1">
                     <View style={{ flex: 1 }}>
                       <TextField
                         label="Previous"

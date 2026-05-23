@@ -113,3 +113,11 @@
 - [x] Fix "Delete forever" action in Trash tab (cascades wipe tenants, bills, items, payments, convs, messages, notifications, tokens)
 - [x] Bump app version to 1.0.2
 - [x] Add vitest cascade-delete coverage (12 tests pass)
+
+## User Feedback — Round 4 (Bill creation)
+- [x] Bill new screen: utility picker per line item (now shows all utilities as chips with name + unit)
+- [x] Bill new screen: tenant selector — vertical, always-visible list with checkmark
+- [x] Bill new screen: replaced silent Alert.alert with toast + confirm dialog so save/deploy work on web
+- [x] Tenant detail: "Create bill for this tenant" Quick Action that deep-links to bill form
+- [x] Tenants list: inline "Bill" shortcut on each row
+- [x] Bump app version to 1.0.3
