@@ -20,6 +20,7 @@ import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
 import { AuthProvider } from "@/lib/auth-context";
 import { OfflineIndicator } from "@/components/offline-indicator";
+import { FeedbackProvider } from "@/components/feedback";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -77,19 +78,21 @@ export default function RootLayout() {
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
-            <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }}>
-              <Stack.Screen name="index" />
-              <Stack.Screen name="login" />
-              <Stack.Screen name="register" />
-              <Stack.Screen name="reset" />
-              <Stack.Screen name="landlord" />
-              <Stack.Screen name="tenant" />
-              <Stack.Screen name="admin" />
-              <Stack.Screen name="get-app" />
-              <Stack.Screen name="oauth/callback" />
-            </Stack>
-            <OfflineIndicator />
-            <StatusBar style="auto" />
+            <FeedbackProvider>
+              <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }}>
+                <Stack.Screen name="index" />
+                <Stack.Screen name="login" />
+                <Stack.Screen name="register" />
+                <Stack.Screen name="reset" />
+                <Stack.Screen name="landlord" />
+                <Stack.Screen name="tenant" />
+                <Stack.Screen name="admin" />
+                <Stack.Screen name="get-app" />
+                <Stack.Screen name="oauth/callback" />
+              </Stack>
+              <OfflineIndicator />
+              <StatusBar style="auto" />
+            </FeedbackProvider>
           </AuthProvider>
         </QueryClientProvider>
       </trpc.Provider>

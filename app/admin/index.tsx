@@ -10,6 +10,7 @@ import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
 import { formatPHP, formatDateTime, relativeTime } from "@/lib/format";
+import { useConfirm, useToast } from "@/components/feedback";
 
 type TabKey = "stats" | "landlords" | "trash" | "antispam" | "releases" | "profile";
 
@@ -123,31 +124,150 @@ function LandlordsTab() {
   const [filter, setFilter] = useState<"pending" | "active" | "frozen">("pending");
   const utils = trpc.useUtils();
   const list = trpc.admin.landlords.list.useQuery({ status: filter });
+  const confirm = useConfirm();
+  const toast = useToast();
+
+  // Tracks which (id, action) is currently in-flight for per-row loading state
+  const [busy, setBusy] = useState<{ id: number; action: string } | null>(null);
+  const isBusy = (id: number, action: string) => busy?.id === id && busy.action === action;
 
   const approve = trpc.admin.landlords.approve.useMutation({
-    onSuccess: () => utils.admin.landlords.list.invalidate(),
+    onSuccess: () => {
+      utils.admin.landlords.list.invalidate();
+      toast("Landlord approved", { variant: "success" });
+    },
+    onError: (e) => toast(e.message ?? "Approval failed", { variant: "error" }),
+    onSettled: () => setBusy(null),
   });
-  const reject = trpc.admin.landlords.reject.useMutation({ onSuccess: () => utils.admin.landlords.list.invalidate() });
-  const freeze = trpc.admin.landlords.freeze.useMutation({ onSuccess: () => utils.admin.landlords.list.invalidate() });
-  const unfreeze = trpc.admin.landlords.unfreeze.useMutation({ onSuccess: () => utils.admin.landlords.list.invalidate() });
-  const softDel = trpc.admin.landlords.softDelete.useMutation({ onSuccess: () => utils.admin.landlords.list.invalidate() });
+  const reject = trpc.admin.landlords.reject.useMutation({
+    onSuccess: () => {
+      utils.admin.landlords.list.invalidate();
+      toast("Landlord rejected", { variant: "success" });
+    },
+    onError: (e) => toast(e.message ?? "Action failed", { variant: "error" }),
+    onSettled: () => setBusy(null),
+  });
+  const freeze = trpc.admin.landlords.freeze.useMutation({
+    onSuccess: () => {
+      utils.admin.landlords.list.invalidate();
+      toast("Landlord frozen", { variant: "success" });
+    },
+    onError: (e) => toast(e.message ?? "Action failed", { variant: "error" }),
+    onSettled: () => setBusy(null),
+  });
+  const unfreeze = trpc.admin.landlords.unfreeze.useMutation({
+    onSuccess: () => {
+      utils.admin.landlords.list.invalidate();
+      toast("Landlord unfrozen", { variant: "success" });
+    },
+    onError: (e) => toast(e.message ?? "Action failed", { variant: "error" }),
+    onSettled: () => setBusy(null),
+  });
+  const softDel = trpc.admin.landlords.softDelete.useMutation({
+    onSuccess: () => {
+      utils.admin.landlords.list.invalidate();
+      toast("Landlord moved to trash (tenants also deactivated)", { variant: "success", duration: 3500 });
+    },
+    onError: (e) => toast(e.message ?? "Delete failed", { variant: "error" }),
+    onSettled: () => setBusy(null),
+  });
   const issueLink = trpc.admin.landlords.issueResetLink.useMutation({
-    onSuccess: (data) =>
-      Alert.alert(
-        "Reset link issued",
-        `Token: ${data.token}\n\nValid for 24h. Share with the landlord — they can sign in to the Reset screen with this token.`,
-      ),
+    onSuccess: (data) => toast(`Reset token: ${data.token.slice(0, 12)}… (valid 24h)`, { variant: "info", duration: 4500 }),
+    onError: (e) => toast(e.message ?? "Action failed", { variant: "error" }),
+    onSettled: () => setBusy(null),
   });
 
   const [resetTargetId, setResetTargetId] = useState<number | null>(null);
   const [newPwd, setNewPwd] = useState("");
   const directReset = trpc.admin.landlords.directReset.useMutation({
     onSuccess: () => {
-      Alert.alert("Password reset", "The landlord can now sign in with the new password.");
+      toast("Password updated", { variant: "success" });
       setResetTargetId(null);
       setNewPwd("");
     },
+    onError: (e) => toast(e.message ?? "Reset failed", { variant: "error" }),
   });
+
+  const onApprove = (id: number, name: string) =>
+    confirm({
+      title: `Approve ${name}?`,
+      message: "The landlord will be able to sign in immediately.",
+      confirmLabel: "Approve",
+      icon: "checkmark.circle.fill",
+    }).then((ok) => {
+      if (ok) {
+        setBusy({ id, action: "approve" });
+        approve.mutate({ id });
+      }
+    });
+
+  const onReject = (id: number, name: string) =>
+    confirm({
+      title: `Reject ${name}?`,
+      message: "The pending registration will be denied. This cannot be undone.",
+      confirmLabel: "Reject",
+      destructive: true,
+      icon: "xmark.circle.fill",
+    }).then((ok) => {
+      if (ok) {
+        setBusy({ id, action: "reject" });
+        reject.mutate({ id });
+      }
+    });
+
+  const onFreeze = (id: number, name: string) =>
+    confirm({
+      title: `Freeze ${name}?`,
+      message: "The landlord will be blocked from signing in until you unfreeze them. Their data is preserved.",
+      confirmLabel: "Freeze",
+      destructive: true,
+      icon: "lock.fill",
+    }).then((ok) => {
+      if (ok) {
+        setBusy({ id, action: "freeze" });
+        freeze.mutate({ id });
+      }
+    });
+
+  const onUnfreeze = (id: number, name: string) =>
+    confirm({
+      title: `Unfreeze ${name}?`,
+      message: "The landlord will be able to sign in again.",
+      confirmLabel: "Unfreeze",
+      icon: "lock.open.fill",
+    }).then((ok) => {
+      if (ok) {
+        setBusy({ id, action: "unfreeze" });
+        unfreeze.mutate({ id });
+      }
+    });
+
+  const onDelete = (id: number, name: string) =>
+    confirm({
+      title: `Delete ${name}?`,
+      message: "This moves the landlord and all of their tenants to Trash. You can restore them within 30 days.",
+      confirmLabel: "Delete",
+      destructive: true,
+      icon: "trash.fill",
+    }).then((ok) => {
+      if (ok) {
+        setBusy({ id, action: "delete" });
+        softDel.mutate({ id });
+      }
+    });
+
+  const onIssueLink = (id: number, name: string) =>
+    confirm({
+      title: `Issue reset link for ${name}?`,
+      message: "A 24-hour token will be generated. Share it privately with the landlord.",
+      confirmLabel: "Issue",
+      icon: "link",
+    }).then((ok) => {
+      if (ok) {
+        setBusy({ id, action: "issueLink" });
+        issueLink.mutate({ id });
+      }
+    });
 
   return (
     <View style={{ flex: 1 }}>
@@ -183,20 +303,20 @@ function LandlordsTab() {
             <View className="flex-row flex-wrap gap-2">
               {filter === "pending" ? (
                 <>
-                  <Button title="Approve" onPress={() => approve.mutate({ id: item.id })} loading={approve.isPending} />
-                  <Button title="Reject" variant="danger" onPress={() => reject.mutate({ id: item.id })} />
+                  <Button title="Approve" onPress={() => onApprove(item.id, item.name ?? item.email ?? "this landlord")} loading={isBusy(item.id, "approve")} />
+                  <Button title="Reject" variant="danger" onPress={() => onReject(item.id, item.name ?? item.email ?? "this landlord")} loading={isBusy(item.id, "reject")} />
                 </>
               ) : null}
               {filter === "active" ? (
                 <>
-                  <Button title="Freeze" variant="secondary" onPress={() => freeze.mutate({ id: item.id })} />
-                  <Button title="Delete" variant="danger" onPress={() => softDel.mutate({ id: item.id })} />
+                  <Button title="Freeze" variant="secondary" onPress={() => onFreeze(item.id, item.name ?? item.email ?? "this landlord")} loading={isBusy(item.id, "freeze")} />
+                  <Button title="Delete" variant="danger" onPress={() => onDelete(item.id, item.name ?? item.email ?? "this landlord")} loading={isBusy(item.id, "delete")} />
                 </>
               ) : null}
               {filter === "frozen" ? (
-                <Button title="Unfreeze" onPress={() => unfreeze.mutate({ id: item.id })} />
+                <Button title="Unfreeze" onPress={() => onUnfreeze(item.id, item.name ?? item.email ?? "this landlord")} loading={isBusy(item.id, "unfreeze")} />
               ) : null}
-              <Button title="Reset link" variant="secondary" onPress={() => issueLink.mutate({ id: item.id })} />
+              <Button title="Reset link" variant="secondary" onPress={() => onIssueLink(item.id, item.name ?? item.email ?? "this landlord")} loading={isBusy(item.id, "issueLink")} />
               <Button title="Set password" variant="secondary" onPress={() => setResetTargetId(item.id)} />
             </View>
           </Card>
@@ -217,7 +337,7 @@ function LandlordsTab() {
                 <Button
                   title="Save"
                   onPress={() => {
-                    if (newPwd.length < 8) return Alert.alert("Too short", "Use at least 8 characters.");
+                    if (newPwd.length < 8) { toast("Use at least 8 characters", { variant: "error" }); return; }
                     if (resetTargetId) directReset.mutate({ id: resetTargetId, newPassword: newPwd });
                   }}
                   loading={directReset.isPending}
@@ -236,10 +356,61 @@ function LandlordsTab() {
 function TrashTab() {
   const utils = trpc.useUtils();
   const list = trpc.admin.landlords.listTrash.useQuery();
-  const restore = trpc.admin.landlords.restore.useMutation({ onSuccess: () => utils.admin.landlords.listTrash.invalidate() });
-  const permDel = trpc.admin.landlords.permanentDelete.useMutation({
-    onSuccess: () => utils.admin.landlords.listTrash.invalidate(),
+  const confirm = useConfirm();
+  const toast = useToast();
+
+  const [busy, setBusy] = useState<{ id: number; action: string } | null>(null);
+  const isBusy = (id: number, action: string) => busy?.id === id && busy.action === action;
+
+  const restore = trpc.admin.landlords.restore.useMutation({
+    onSuccess: () => {
+      utils.admin.landlords.listTrash.invalidate();
+      utils.admin.landlords.list.invalidate();
+      toast("Landlord restored", { variant: "success" });
+    },
+    onError: (e) => toast(e.message ?? "Restore failed", { variant: "error" }),
+    onSettled: () => setBusy(null),
   });
+  const permDel = trpc.admin.landlords.permanentDelete.useMutation({
+    onSuccess: (data) => {
+      utils.admin.landlords.listTrash.invalidate();
+      utils.admin.landlords.list.invalidate();
+      utils.admin.stats.invalidate();
+      const detail = data && "tenants" in data
+        ? ` (${data.tenants} tenant${data.tenants === 1 ? "" : "s"}, ${data.bills} bill${data.bills === 1 ? "" : "s"} removed)`
+        : "";
+      toast(`Permanently deleted${detail}`, { variant: "success", duration: 4000 });
+    },
+    onError: (e) => toast(e.message ?? "Delete failed", { variant: "error" }),
+    onSettled: () => setBusy(null),
+  });
+
+  const onRestore = (id: number, name: string) =>
+    confirm({
+      title: `Restore ${name}?`,
+      message: "The landlord will be reactivated and can sign in again. Their tenants stay deactivated and must be restored separately.",
+      confirmLabel: "Restore",
+      icon: "arrow.uturn.backward",
+    }).then((ok) => {
+      if (ok) {
+        setBusy({ id, action: "restore" });
+        restore.mutate({ id });
+      }
+    });
+
+  const onPermDel = (id: number, name: string) =>
+    confirm({
+      title: `Permanently delete ${name}?`,
+      message: "This wipes the landlord, ALL of their tenants, bills, payments, and chats. This cannot be undone.",
+      confirmLabel: "Delete forever",
+      destructive: true,
+      icon: "exclamationmark.triangle.fill",
+    }).then((ok) => {
+      if (ok) {
+        setBusy({ id, action: "perm" });
+        permDel.mutate({ id });
+      }
+    });
 
   return (
     <View style={{ flex: 1 }}>
@@ -251,6 +422,7 @@ function TrashTab() {
         data={list.data ?? []}
         keyExtractor={(l) => String(l.id)}
         contentContainerStyle={{ padding: 16, paddingTop: 0, gap: 8 }}
+        refreshControl={<RefreshControl refreshing={list.isFetching} onRefresh={() => list.refetch()} />}
         ListEmptyComponent={<EmptyState icon="trash.fill" title="Trash is empty" />}
         renderItem={({ item }) => (
           <Card>
@@ -261,16 +433,16 @@ function TrashTab() {
               </View>
             </View>
             <View className="flex-row gap-2">
-              <Button title="Restore" onPress={() => restore.mutate({ id: item.id })} />
+              <Button
+                title="Restore"
+                onPress={() => onRestore(item.id, item.name ?? item.email ?? "this landlord")}
+                loading={isBusy(item.id, "restore")}
+              />
               <Button
                 title="Delete forever"
                 variant="danger"
-                onPress={() =>
-                  Alert.alert("Permanent delete", "Cannot be undone. Continue?", [
-                    { text: "Cancel", style: "cancel" },
-                    { text: "Delete", style: "destructive", onPress: () => permDel.mutate({ id: item.id }) },
-                  ])
-                }
+                onPress={() => onPermDel(item.id, item.name ?? item.email ?? "this landlord")}
+                loading={isBusy(item.id, "perm")}
               />
             </View>
           </Card>

@@ -663,7 +663,7 @@ const adminRouter = router({
     }),
 
     softDelete: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
-      await db.updateUser(input.id, { status: "deleted", deletedAt: new Date() });
+      await db.softDeleteLandlordCascade(input.id);
       return { ok: true };
     }),
 
@@ -675,14 +675,8 @@ const adminRouter = router({
     }),
 
     permanentDelete: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
-      // Note: in production, you'd cascade delete bills, etc. For now we update the email to free it up.
-      const u = await db.getUserById(input.id);
-      if (!u) return { ok: true };
-      await db.updateUser(input.id, {
-        status: "deleted",
-        email: `deleted_${input.id}_${u.email}`,
-      });
-      return { ok: true };
+      const result = await db.permanentDeleteLandlordCascade(input.id);
+      return { ok: true, ...result };
     }),
 
     directReset: adminProcedure

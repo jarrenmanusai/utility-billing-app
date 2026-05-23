@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   apkReleases,
@@ -572,4 +572,90 @@ export async function listTrashedLandlords() {
     .from(users)
     .where(and(eq(users.role, "landlord"), eq(users.status, "deleted")))
     .orderBy(desc(users.deletedAt));
+}
+
+// ----- Cascade delete helpers (admin) -----
+
+/**
+ * Soft-delete a landlord and all of their tenants.
+ * Marks landlord + tenants as status="deleted" so they can no longer sign in.
+ * Bills/messages remain so the admin can still see history; they become orphans
+ * but are visible only via the trashed user.
+ */
+export async function softDeleteLandlordCascade(landlordId: number) {
+  const db = await requireDb();
+  const now = new Date();
+  // Soft-delete tenants of this landlord
+  await db
+    .update(users)
+    .set({ status: "deleted", deletedAt: now })
+    .where(and(eq(users.role, "tenant"), eq(users.landlordId, landlordId)));
+  // Soft-delete the landlord
+  await db
+    .update(users)
+    .set({ status: "deleted", deletedAt: now })
+    .where(eq(users.id, landlordId));
+}
+
+/**
+ * Permanently delete a landlord and EVERYTHING associated:
+ * tenants, utilities, bills, bill items, payments, conversations, messages,
+ * notifications, and reset tokens. Returns counts for confirmation.
+ */
+export async function permanentDeleteLandlordCascade(landlordId: number) {
+  const db = await requireDb();
+
+  // 1. Find all tenants of this landlord
+  const tenantRows = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.role, "tenant"), eq(users.landlordId, landlordId)));
+  const tenantIds = tenantRows.map((r) => r.id);
+
+  // 2. Find all bills of this landlord
+  const billRows = await db
+    .select({ id: bills.id })
+    .from(bills)
+    .where(eq(bills.landlordId, landlordId));
+  const billIds = billRows.map((r) => r.id);
+
+  // 3. Delete bill items + payments for these bills
+  if (billIds.length > 0) {
+    await db.delete(billItems).where(inArray(billItems.billId, billIds));
+    await db.delete(payments).where(inArray(payments.billId, billIds));
+    await db.delete(bills).where(inArray(bills.id, billIds));
+  }
+
+  // 4. Conversations + messages
+  const convRows = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(eq(conversations.landlordId, landlordId));
+  const convIds = convRows.map((r) => r.id);
+  if (convIds.length > 0) {
+    await db.delete(messages).where(inArray(messages.conversationId, convIds));
+    await db.delete(conversations).where(inArray(conversations.id, convIds));
+  }
+
+  // 5. Utilities
+  await db.delete(utilities).where(eq(utilities.landlordId, landlordId));
+
+  // 6. Notifications and reset tokens for landlord + tenants
+  const allUserIds = [landlordId, ...tenantIds];
+  if (allUserIds.length > 0) {
+    await db.delete(notifications).where(inArray(notifications.userId, allUserIds));
+    await db.delete(resetTokens).where(inArray(resetTokens.userId, allUserIds));
+  }
+
+  // 7. Finally remove tenants and landlord
+  if (tenantIds.length > 0) {
+    await db.delete(users).where(inArray(users.id, tenantIds));
+  }
+  await db.delete(users).where(eq(users.id, landlordId));
+
+  return {
+    tenants: tenantIds.length,
+    bills: billIds.length,
+    conversations: convIds.length,
+  };
 }

@@ -105,3 +105,11 @@
 - [x] Admin console: fix text truncation on the Landlords moderation tab
 - [x] Admin Overview stat cards: tapping a card (Landlords, Tenants, Bills, Revenue) navigates to the matching tab
 - [x] Bump app version to 1.0.1 in app.config.ts
+
+## User Feedback — Round 3 (Admin console)
+- [x] Add web-safe confirmation dialog before destructive actions (delete, freeze, soft-delete, delete-forever)
+- [x] Show visual feedback (loading state, success/error toast) on every admin button action
+- [x] Cascade: when a landlord is soft-deleted, also soft-delete or detach their tenants (no orphan tenants)
+- [x] Fix "Delete forever" action in Trash tab (cascades wipe tenants, bills, items, payments, convs, messages, notifications, tokens)
+- [x] Bump app version to 1.0.2
+- [x] Add vitest cascade-delete coverage (12 tests pass)

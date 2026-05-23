@@ -56,6 +56,7 @@ const MAPPING = {
   "eye.slash.fill": "visibility-off",
   "sparkles": "auto-awesome",
   "exclamationmark.triangle.fill": "warning",
+  "exclamationmark.circle.fill": "error",
   "info.circle.fill": "info",
   "questionmark.circle.fill": "help",
   "calendar": "calendar-today",
@@ -72,6 +73,9 @@ const MAPPING = {
   "arrow.down.app.fill": "download",
   "arrow.up.app.fill": "upload",
   "hourglass": "hourglass-empty",
+  "lock.open.fill": "lock-open",
+  "arrow.uturn.backward": "undo",
+  "link": "link",
 } satisfies IconMapping;
 
 /**
