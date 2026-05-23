@@ -76,6 +76,15 @@ const MAPPING = {
   "lock.open.fill": "lock-open",
   "arrow.uturn.backward": "undo",
   "link": "link",
+  "drop.fill": "water-drop",
+  "wifi": "wifi",
+  "flame.fill": "local-fire-department",
+  "trash": "delete-outline",
+  "tv.fill": "tv",
+  "phone.fill": "phone",
+  "car.fill": "directions-car",
+  "house.lodge.fill": "cottage",
+  "leaf.fill": "eco",
 } satisfies IconMapping;
 
 /**
