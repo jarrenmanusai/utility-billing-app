@@ -90,18 +90,14 @@ export default function NewBillScreen() {
   };
 
   const addItem = () => {
-    const firstUtility = utilities.data?.[0];
     const newItem: LineItem = {
-      utilityId: firstUtility?.id ?? null,
+      utilityId: null,
       previousReading: "",
       currentReading: "",
-      rate: firstUtility ? String(firstUtility.defaultRate) : "",
+      rate: "",
       prefilled: false,
     };
     setItems((prev) => [...prev, newItem]);
-    if (tenantId && firstUtility) {
-      setTimeout(() => fetchPrevForItem(items.length, firstUtility.id), 0);
-    }
   };
 
   const removeItem = (idx: number) => setItems((prev) => prev.filter((_, i) => i !== idx));
