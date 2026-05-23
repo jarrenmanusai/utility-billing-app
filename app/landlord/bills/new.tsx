@@ -3,7 +3,7 @@ import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, Vie
 import { router, useLocalSearchParams } from "expo-router";
 
 import { ScreenContainer } from "@/components/screen-container";
-import { Button, Card, ScreenHeader, TextField } from "@/components/ui/primitives";
+import { Button, Card, Dropdown, ScreenHeader, TextField } from "@/components/ui/primitives";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
@@ -210,42 +210,21 @@ export default function NewBillScreen() {
       <ScreenHeader title={editId ? "Edit bill" : "New bill"} onBack={() => router.back()} />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
-          {/* Tenant selector — vertical list, always visible */}
+          {/* Tenant selector — dropdown */}
           <Card>
-            <Text className="text-sm font-semibold text-foreground mb-2">
-              Tenant {selectedTenant ? `· ${selectedTenant.name ?? selectedTenant.email}` : ""}
-            </Text>
-            {tenantList.length === 0 ? (
-              <Text className="text-xs text-muted">No tenants yet. Go to Tenants tab and add one first.</Text>
-            ) : (
-              <View className="gap-1.5">
-                {tenantList.map((t) => {
-                  const selected = tenantId === t.id;
-                  return (
-                    <Pressable
-                      key={t.id}
-                      onPress={() => setTenantId(t.id)}
-                      style={({ pressed }) => [pressed && { opacity: 0.7 }]}
-                      className={`flex-row items-center justify-between rounded-xl border px-3 py-2.5 ${
-                        selected ? "bg-primary/10 border-primary" : "bg-surface border-border"
-                      }`}
-                    >
-                      <View className="flex-1">
-                        <Text className={`text-sm font-semibold ${selected ? "text-primary" : "text-foreground"}`}>
-                          {t.name ?? t.email}
-                        </Text>
-                        <Text className="text-xs text-muted">{t.email}</Text>
-                      </View>
-                      {selected ? (
-                        <IconSymbol name="checkmark.circle.fill" size={22} color={colors.tint} />
-                      ) : (
-                        <View className="w-5 h-5 rounded-full border border-border" />
-                      )}
-                    </Pressable>
-                  );
-                })}
-              </View>
-            )}
+            <Dropdown
+              label="Tenant"
+              placeholder="Choose a tenant…"
+              value={tenantId}
+              options={tenantList.map((t) => ({
+                value: t.id,
+                label: t.name ?? t.email ?? "",
+                sublabel: t.email ?? undefined,
+              }))}
+              onChange={(v) => setTenantId(Number(v))}
+              emptyText="No tenants yet."
+              emptyAction={{ label: "Add tenant", onPress: () => router.push("/landlord/tenants/new") }}
+            />
           </Card>
 
           {/* Meter photo + OCR */}
@@ -281,12 +260,13 @@ export default function NewBillScreen() {
             <View className="flex-row items-center justify-between mb-2">
               <Text className="text-base font-semibold text-foreground">Bill items</Text>
               <Button
-                title="Add item"
+                title={utilityList.length === 0 ? "Add utility type" : "Add item"}
                 icon="plus"
                 variant="secondary"
                 onPress={() => {
                   if (utilityList.length === 0) {
-                    toast("Add a utility type first (Utilities tab)", { variant: "error", duration: 3500 });
+                    toast("Add a utility type first", { variant: "info" });
+                    router.push("/landlord/utilities");
                     return;
                   }
                   addItem();
@@ -295,9 +275,23 @@ export default function NewBillScreen() {
             </View>
             {items.length === 0 ? (
               <Card>
-                <Text className="text-sm text-muted">
-                  Tap &quot;Add item&quot; above to charge for a utility (e.g. Electricity, Water).
-                </Text>
+                {utilityList.length === 0 ? (
+                  <View>
+                    <Text className="text-sm text-foreground font-medium mb-1">No utility types yet</Text>
+                    <Text className="text-sm text-muted mb-3">
+                      You need at least one utility type (e.g. Electricity, Water) before you can add bill items.
+                    </Text>
+                    <Button
+                      title="Go to Utilities"
+                      icon="bolt.fill"
+                      onPress={() => router.push("/landlord/utilities")}
+                    />
+                  </View>
+                ) : (
+                  <Text className="text-sm text-muted">
+                    Tap &quot;Add item&quot; above to charge for a utility (e.g. Electricity, Water).
+                  </Text>
+                )}
               </Card>
             ) : null}
             {items.map((it, idx) => {
@@ -315,36 +309,24 @@ export default function NewBillScreen() {
                     </Pressable>
                   </View>
 
-                  {/* Utility picker — explicit list */}
-                  <Text className="text-xs font-medium text-muted mb-1.5">Utility type</Text>
-                  {utilityList.length === 0 ? (
-                    <Text className="text-xs text-muted mb-2">
-                      No utility types yet. Add one in the Utilities tab.
-                    </Text>
-                  ) : (
-                    <View className="flex-row flex-wrap gap-1.5 mb-2">
-                      {utilityList.map((u) => {
-                        const selected = it.utilityId === u.id;
-                        return (
-                          <Pressable
-                            key={u.id}
-                            onPress={() => {
-                              updateItem(idx, { utilityId: u.id, rate: String(u.defaultRate) });
-                              fetchPrevForItem(idx, u.id);
-                            }}
-                            style={({ pressed }) => [pressed && { opacity: 0.7 }]}
-                            className={`px-3 py-1.5 rounded-full border ${
-                              selected ? "bg-primary border-primary" : "bg-surface border-border"
-                            }`}
-                          >
-                            <Text className={`text-xs font-semibold ${selected ? "text-white" : "text-foreground"}`}>
-                              {u.name} ({u.unit})
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  )}
+                  {/* Utility picker — dropdown */}
+                  <Dropdown
+                    label="Utility type"
+                    placeholder="Choose utility…"
+                    value={it.utilityId}
+                    options={utilityList.map((u) => ({
+                      value: u.id,
+                      label: `${u.name} (${u.unit})`,
+                      sublabel: `Default rate: ₱${u.defaultRate}`,
+                    }))}
+                    onChange={(v) => {
+                      const uid = Number(v);
+                      const u = utilityList.find((x) => x.id === uid);
+                      updateItem(idx, { utilityId: uid, rate: u ? String(u.defaultRate) : it.rate });
+                      if (u) fetchPrevForItem(idx, u.id);
+                    }}
+                    containerClassName="mb-2"
+                  />
 
                   <View className="flex-row gap-2 mt-1">
                     <View style={{ flex: 1 }}>

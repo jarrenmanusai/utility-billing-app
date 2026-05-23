@@ -254,3 +254,120 @@ export function StatusBadge({ status }: { status: string }) {
     </View>
   );
 }
+
+// ---------- Dropdown ----------
+
+import { Modal, ScrollView } from "react-native";
+
+export interface DropdownOption {
+  value: string | number;
+  label: string;
+  sublabel?: string;
+}
+
+interface DropdownProps {
+  label?: string;
+  placeholder?: string;
+  value: string | number | null | undefined;
+  options: DropdownOption[];
+  onChange: (value: string | number) => void;
+  disabled?: boolean;
+  emptyText?: string;
+  emptyAction?: { label: string; onPress: () => void };
+  containerClassName?: string;
+}
+
+export function Dropdown({
+  label,
+  placeholder = "Select…",
+  value,
+  options,
+  onChange,
+  disabled,
+  emptyText,
+  emptyAction,
+  containerClassName,
+}: DropdownProps) {
+  const colors = useColors();
+  const [open, setOpen] = useState(false);
+  const selected = options.find((o) => o.value === value);
+
+  return (
+    <View className={cn("gap-1.5", containerClassName)}>
+      {label ? <Text className="text-sm font-medium text-foreground">{label}</Text> : null}
+      <Pressable
+        onPress={() => {
+          if (disabled) return;
+          if (options.length === 0 && emptyAction) {
+            emptyAction.onPress();
+            return;
+          }
+          setOpen(true);
+        }}
+        disabled={disabled}
+        style={({ pressed }) => [pressed && !disabled && { opacity: 0.7 }, disabled && { opacity: 0.55 }]}
+      >
+        <View className="flex-row items-center bg-surface rounded-xl border border-border px-4 h-12">
+          <Text className={cn("flex-1 text-base", selected ? "text-foreground" : "text-muted")} numberOfLines={1}>
+            {selected ? selected.label : placeholder}
+          </Text>
+          <IconSymbol name="chevron.right" size={18} color={colors.muted} style={{ transform: [{ rotate: "90deg" }] }} />
+        </View>
+      </Pressable>
+
+      {options.length === 0 && emptyText ? (
+        <View className="flex-row items-center justify-between mt-1">
+          <Text className="text-xs text-muted flex-1">{emptyText}</Text>
+          {emptyAction ? (
+            <Pressable onPress={emptyAction.onPress} hitSlop={8} style={({ pressed }) => [pressed && { opacity: 0.6 }]}>
+              <Text className="text-xs font-semibold text-primary">{emptyAction.label}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable
+          onPress={() => setOpen(false)}
+          style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", padding: 20 }}
+        >
+          <Pressable onPress={(e) => e.stopPropagation()} style={{ backgroundColor: colors.surface, borderRadius: 16, maxHeight: "70%" }}>
+            <View className="px-4 py-3 border-b border-border flex-row items-center justify-between">
+              <Text className="text-base font-semibold text-foreground">{label ?? "Select"}</Text>
+              <Pressable onPress={() => setOpen(false)} hitSlop={8}>
+                <IconSymbol name="xmark" size={18} color={colors.text} />
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={{ padding: 8 }}>
+              {options.map((opt) => {
+                const isSelected = opt.value === value;
+                return (
+                  <Pressable
+                    key={String(opt.value)}
+                    onPress={() => {
+                      onChange(opt.value);
+                      setOpen(false);
+                    }}
+                    style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+                    className={cn(
+                      "flex-row items-center justify-between rounded-xl px-3 py-3 mb-1",
+                      isSelected ? "bg-primary/10" : "bg-transparent",
+                    )}
+                  >
+                    <View className="flex-1">
+                      <Text className={cn("text-base font-medium", isSelected ? "text-primary" : "text-foreground")}>
+                        {opt.label}
+                      </Text>
+                      {opt.sublabel ? <Text className="text-xs text-muted mt-0.5">{opt.sublabel}</Text> : null}
+                    </View>
+                    {isSelected ? <IconSymbol name="checkmark.circle.fill" size={20} color={colors.tint} /> : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}

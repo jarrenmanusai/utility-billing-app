@@ -121,3 +121,9 @@
 - [x] Tenant detail: "Create bill for this tenant" Quick Action that deep-links to bill form
 - [x] Tenants list: inline "Bill" shortcut on each row
 - [x] Bump app version to 1.0.3
+
+## User Feedback — Round 5 (Bill creation UX)
+- [x] Replace tenant picker with a real dropdown (modal-based, works on web + native)
+- [x] Replace per-item utility picker with a dropdown menu (label + default rate shown)
+- [x] When there are no utility types, Add Item button toasts + redirects to Utilities; empty state inside the items list also shows a Go to Utilities button
+- [x] Bump app version to 1.0.4
