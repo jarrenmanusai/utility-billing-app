@@ -219,7 +219,6 @@ export default function NewBillScreen() {
               options={tenantList.map((t) => ({
                 value: t.id,
                 label: t.name ?? t.email ?? "",
-                sublabel: t.email ?? undefined,
               }))}
               onChange={(v) => setTenantId(Number(v))}
               emptyText="No tenants yet."
