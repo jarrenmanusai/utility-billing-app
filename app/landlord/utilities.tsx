@@ -242,7 +242,7 @@ export default function UtilitiesScreen() {
                         onPress={() => {
                           setName(p.name);
                           setUnit(p.unit);
-                          setRate(String(p.rate));
+                          // Rate intentionally left empty so landlord enters their own
                         }}
                         style={({ pressed }) => [
                           {
