@@ -350,17 +350,28 @@ export function Dropdown({
                     }}
                     style={({ pressed }) => [pressed && { opacity: 0.7 }]}
                     className={cn(
-                      "flex-row items-center justify-between rounded-xl px-3 py-3 mb-1",
+                      "flex-row items-center rounded-xl px-3 py-3 mb-1 gap-3",
                       isSelected ? "bg-primary/10" : "bg-transparent",
                     )}
                   >
-                    <View className="flex-1">
-                      <Text className={cn("text-base font-medium", isSelected ? "text-primary" : "text-foreground")}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text
+                        className={cn("text-base font-semibold", isSelected ? "text-primary" : "text-foreground")}
+                        numberOfLines={1}
+                      >
                         {opt.label}
                       </Text>
-                      {opt.sublabel ? <Text className="text-xs text-muted mt-0.5">{opt.sublabel}</Text> : null}
+                      {opt.sublabel ? (
+                        <Text className="text-xs text-muted mt-0.5" numberOfLines={1}>
+                          {opt.sublabel}
+                        </Text>
+                      ) : null}
                     </View>
-                    {isSelected ? <IconSymbol name="checkmark.circle.fill" size={20} color={colors.tint} /> : null}
+                    <View style={{ width: 22, alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      {isSelected ? (
+                        <IconSymbol name="checkmark.circle.fill" size={22} color={colors.tint} />
+                      ) : null}
+                    </View>
                   </Pressable>
                 );
               })}
