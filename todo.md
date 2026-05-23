@@ -98,3 +98,10 @@
 - [x] auth.logout cookie clearing
 - [x] PHP currency formatter (A7)
 - [x] Smart billing math (A3, A5, A6)
+
+## User Feedback — Round 2 (May 23, 2026)
+- [x] Register screen: show "Account created — pending admin approval" confirmation
+- [x] Landlord tenant-create flow: show "Tenant account created" success confirmation with credentials summary
+- [x] Admin console: fix text truncation on the Landlords moderation tab
+- [x] Admin Overview stat cards: tapping a card (Landlords, Tenants, Bills, Revenue) navigates to the matching tab
+- [x] Bump app version to 1.0.1 in app.config.ts

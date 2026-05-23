@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, FlatList, Image, Modal, RefreshControl, ScrollView, Text, View } from "react-native";
+import { Alert, FlatList, Image, Modal, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
 
 import { ScreenContainer } from "@/components/screen-container";
@@ -42,7 +42,7 @@ export default function AdminConsole() {
       </View>
 
       <View style={{ flex: 1 }}>
-        {tab === "stats" ? <StatsTab /> : null}
+        {tab === "stats" ? <StatsTab onNavigate={(k) => setTab(k)} /> : null}
         {tab === "landlords" ? <LandlordsTab /> : null}
         {tab === "trash" ? <TrashTab /> : null}
         {tab === "antispam" ? <AntiSpamTab /> : null}
@@ -57,17 +57,17 @@ export default function AdminConsole() {
 
 // ---------- Stats ----------
 
-function StatsTab() {
+function StatsTab({ onNavigate }: { onNavigate: (tab: TabKey) => void }) {
   const stats = trpc.admin.stats.useQuery();
-  const colors = useColors();
   return (
     <ScrollView
       contentContainerStyle={{ padding: 16, gap: 12 }}
       refreshControl={<RefreshControl refreshing={stats.isFetching} onRefresh={() => stats.refetch()} />}
     >
       <Text className="text-xl font-bold text-foreground">Platform overview</Text>
+      <Text className="text-xs text-muted">Tap a card to jump to its section.</Text>
       <View className="flex-row gap-3">
-        <StatCard icon="person.2.fill" label="Landlords" value={String(stats.data?.landlords ?? "—")} />
+        <StatCard icon="person.2.fill" label="Landlords" value={String(stats.data?.landlords ?? "—")} onPress={() => onNavigate("landlords")} />
         <StatCard icon="person.fill" label="Tenants" value={String(stats.data?.tenants ?? "—")} />
       </View>
       <View className="flex-row gap-3">
@@ -75,8 +75,8 @@ function StatsTab() {
         <StatCard icon="banknote" label="Total revenue" value={stats.data ? formatPHP(stats.data.revenue) : "—"} />
       </View>
       <View className="flex-row gap-3">
-        <StatCard icon="hourglass" label="Pending" value={String(stats.data?.pendingLandlords ?? "—")} />
-        <StatCard icon="lock.fill" label="Frozen" value={String(stats.data?.frozenLandlords ?? "—")} />
+        <StatCard icon="hourglass" label="Pending" value={String(stats.data?.pendingLandlords ?? "—")} onPress={() => onNavigate("landlords")} />
+        <StatCard icon="lock.fill" label="Frozen" value={String(stats.data?.frozenLandlords ?? "—")} onPress={() => onNavigate("landlords")} />
       </View>
     </ScrollView>
   );
@@ -86,20 +86,34 @@ function StatCard({
   icon,
   label,
   value,
+  onPress,
 }: {
   icon: React.ComponentProps<typeof IconSymbol>["name"];
   label: string;
   value: string;
+  onPress?: () => void;
 }) {
   const colors = useColors();
-  return (
+  const content = (
     <View className="flex-1 bg-surface rounded-2xl border border-border p-4">
       <View className="flex-row items-center gap-2">
         <IconSymbol name={icon} size={18} color={colors.tint} />
         <Text className="text-xs text-muted">{label}</Text>
       </View>
-      <Text className="text-xl font-bold text-foreground mt-2">{value}</Text>
+      <View className="flex-row items-center justify-between mt-2">
+        <Text className="text-xl font-bold text-foreground">{value}</Text>
+        {onPress ? <IconSymbol name="chevron.right" size={16} color={colors.muted} /> : null}
+      </View>
     </View>
+  );
+  if (!onPress) return content;
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [{ flex: 1 }, pressed && { opacity: 0.6 }]}
+    >
+      {content}
+    </Pressable>
   );
 }
 

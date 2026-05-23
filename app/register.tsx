@@ -1,26 +1,26 @@
 import { useState } from "react";
-import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
 
 import { ScreenContainer } from "@/components/screen-container";
-import { Button, ScreenHeader, TextField } from "@/components/ui/primitives";
+import { Button, Card, ScreenHeader, TextField } from "@/components/ui/primitives";
+import { IconSymbol } from "@/components/ui/icon-symbol";
+import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
 
 export default function RegisterScreen() {
+  const colors = useColors();
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
 
   const register = trpc.auth.register.useMutation({
-    onSuccess: () => {
-      Alert.alert(
-        "Registration submitted",
-        "Your account is now awaiting admin approval. You'll be able to sign in once it's approved.",
-        [{ text: "OK", onPress: () => router.replace("/login") }],
-      );
+    onSuccess: (_data, vars) => {
+      setSubmittedEmail(vars.email);
     },
     onError: (err) => setError(err.message ?? "Unable to register."),
   });
@@ -41,6 +41,62 @@ export default function RegisterScreen() {
     }
     register.mutate({ email: email.trim().toLowerCase(), name: name.trim(), password });
   };
+
+  // Success state: account submitted, awaiting admin approval
+  if (submittedEmail) {
+    return (
+      <ScreenContainer edges={["top", "bottom", "left", "right"]}>
+        <ScreenHeader title="Account submitted" />
+        <View className="flex-1 px-6 py-8 gap-6 justify-center">
+          <View className="items-center">
+            <View
+              className="w-20 h-20 rounded-full items-center justify-center mb-4"
+              style={{ backgroundColor: colors.success + "22" }}
+            >
+              <IconSymbol name="checkmark.circle.fill" size={56} color={colors.success} />
+            </View>
+            <Text className="text-2xl font-bold text-foreground text-center">
+              You&apos;re almost in
+            </Text>
+            <Text className="text-base text-muted text-center mt-2">
+              Your landlord account has been created and is now awaiting admin approval.
+            </Text>
+          </View>
+
+          <Card>
+            <View className="gap-3">
+              <View className="flex-row items-start gap-2">
+                <IconSymbol name="envelope.fill" size={18} color={colors.primary} />
+                <View className="flex-1">
+                  <Text className="text-xs text-muted">Email</Text>
+                  <Text className="text-base text-foreground font-semibold">{submittedEmail}</Text>
+                </View>
+              </View>
+              <View className="flex-row items-start gap-2">
+                <IconSymbol name="hourglass" size={18} color={colors.warning} />
+                <View className="flex-1">
+                  <Text className="text-xs text-muted">Status</Text>
+                  <Text className="text-base text-foreground font-semibold">Pending approval</Text>
+                </View>
+              </View>
+              <View className="flex-row items-start gap-2">
+                <IconSymbol name="info.circle.fill" size={18} color={colors.muted} />
+                <View className="flex-1">
+                  <Text className="text-xs text-muted">What happens next</Text>
+                  <Text className="text-sm text-foreground mt-0.5">
+                    An admin will review your account. Once approved, you can sign in with your
+                    email and password and start managing tenants.
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </Card>
+
+          <Button title="Back to sign in" onPress={() => router.replace("/login")} />
+        </View>
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer edges={["top", "bottom", "left", "right"]}>

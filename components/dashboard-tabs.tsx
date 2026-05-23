@@ -69,11 +69,16 @@ export function DashboardTabs({
               ) : null}
             </View>
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
               style={{
                 fontSize: 11,
                 marginTop: 2,
+                paddingHorizontal: 2,
                 color: isActive ? colors.tint : colors.muted,
                 fontWeight: isActive ? "600" : "500",
+                textAlign: "center",
               }}
             >
               {t.label}
