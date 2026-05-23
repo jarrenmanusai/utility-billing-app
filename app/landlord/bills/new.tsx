@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from "expo-router";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { Button, Card, Dropdown, ScreenHeader, TextField } from "@/components/ui/primitives";
+import { DueDatePicker } from "@/components/due-date-picker";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
@@ -380,13 +381,7 @@ export default function NewBillScreen() {
           </Card>
 
           {/* Misc */}
-          <TextField
-            label="Due date (optional, YYYY-MM-DD)"
-            value={dueDate}
-            onChangeText={setDueDate}
-            placeholder="2026-06-15"
-            autoCapitalize="none"
-          />
+          <DueDatePicker value={dueDate} onChange={setDueDate} />
           <TextField
             label="Notes (optional)"
             value={notes}

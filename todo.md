@@ -139,3 +139,19 @@
 - [x] Single source-of-truth version constant (constants/app-version.ts) read by About + headers
 - [x] Bump version to 1.1.3 and keep app.config.ts in sync (guarded by vitest)
 - [x] About screen reads APP_VERSION dynamically so display is always accurate after deploy
+
+## User Feedback — Round 10 (Smart due-date input)
+- [x] Replace plain due-date text field with a native date picker (expo-compatible) as primary input
+- [x] Add smart text-parse fallback: MM/DD = current year, MM/DD/YY = 2000s, ISO honoured, past-date rolls to next year
+- [x] Live preview under the field showing "Due: May 30, 2026 (Saturday)"
+- [x] Inline error toast if parsing fails
+- [x] Vitest covering all the parsing edge cases
+- [x] Bump app version
+
+## User Feedback — Round 11 (Date autofill + format consistency)
+- [x] Autofill suggestion chips when landlord types vague input (e.g. month-only, day-only, partial month)
+- [x] All UI date displays use long "May 23, 2026" format — never MM/DD/YYYY or ISO
+- [x] formatDate / formatDateTime helpers updated to long format for app-wide consistency
+- [x] Web fallback for native picker uses HTML5 input type="date" since native picker is no-op on web
+- [x] Vitest covers formatLongDate + suggestDates edge cases (month-only, day-only, partial, year-roll, invalid days, past-skip)
+- [x] Bump version to 1.1.4
