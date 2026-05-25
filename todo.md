@@ -298,3 +298,10 @@
 - [x] Spell out native Android build path (EAS image: ubuntu-22.04-jdk-21-ndk-r27b)
 - [x] Confirm "no web app" deploy hard-constraint
 - [x] Document drizzle migrations (0000..0002) + verification SQL
+
+## User Feedback — Round 28 (2026-05-26)
+- [x] Update MANUS_HANDOFF.txt: remove OAuth, switch to email+password only
+- [x] Document seeded admin (jarren.manusai@outlook.com) + wipe of all other seeded accounts
+- [x] Add full DB rebuild-from-scratch procedure (DROP + CREATE + migrate)
+- [x] Add "always deploy the latest tag" policy
+- [x] Add comprehensive audit checklist (sections A-H, all must pass)
