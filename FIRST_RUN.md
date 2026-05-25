@@ -50,6 +50,39 @@ Either way it is a deploy-blocker.
 
 ---
 
+## 3a. Locked built-in secrets (read this if `pnpm fix:env` says so)
+
+> **New in v1.6.2.** The Manus webdev runtime now refuses
+> `webdev_request_secrets` overrides for three keys it classifies as
+> built-in secrets: `OAUTH_SERVER_URL`, `OWNER_OPEN_ID`, `JWT_SECRET`.
+> Attempting an override returns `Cannot edit built-in secrets: ...`.
+
+The deploy contract still requires `OAUTH_SERVER_URL` and `OWNER_OPEN_ID`
+to be empty/unset (so the OAuth gate stays closed) and `JWT_SECRET` to be
+≥ 32 chars (so session cookies use a strong signing key). When the tool
+override is blocked, work through the lanes in this exact order:
+
+| Lane | Action | When to use |
+|---|---|---|
+| **1** | `webdev_request_secrets` with `preventMatching: true` | Default; works whenever the platform allows it. |
+| **2** | Manus webdev panel → **Settings → Secrets → [key] → Edit** | When Lane 1 returns *Cannot edit built-in secrets*. Paste the value, save, run `webdev_restart_server`. |
+| **3** | Add `MANUS_RUNTIME_BUILTINS_LOCKED=1` to `.secrets.local.txt` | Last resort, when both Lane 1 and Lane 2 are blocked. Downgrades the related audit checks to **WARN** instead of **FAIL** so the deploy can proceed. |
+
+Lane 3 is OPT-IN by design. With it set:
+
+- `JWT_SECRET` will keep the runtime's 22-char placeholder. Session
+  cookies and CAPTCHA HMACs will still work but use a weaker signing key.
+  **Rotate as soon as the platform allows real overrides.**
+- If the OAuth gate is still open (both `OAUTH_SERVER_URL` and
+  `OWNER_OPEN_ID` truthy), `/api/oauth/*` routes WILL mount in production.
+  Confirm with the operator before shipping that this is acceptable for
+  the target audience.
+
+The `pnpm fix:env --pretty` command emits a two-lane output: Lane 1 is a
+ready-to-paste `webdev_request_secrets` JSON for keys that can still be
+overridden, and Lane 2 is a human-readable list of keys that need the UI
+fallback.
+
 ## 4. Stage operator secrets (one time, before deploy)
 
 The repo never stores deploy credentials. Two paths:

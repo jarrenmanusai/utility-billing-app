@@ -41,11 +41,25 @@ function generateStrongJwtSecret(): string {
   return randomBytes(48).toString("hex");
 }
 
-function buildFixSecrets(): SecretSpec[] {
+// v1.6.2: identify keys that the Manus runtime classifies as built-in
+// secrets and refuses webdev_request_secrets overrides for. Treat these
+// as "need UI fallback" rather than tool-payload entries.
+const LOCKED_BUILTIN_KEYS = new Set(["OAUTH_SERVER_URL", "OWNER_OPEN_ID", "JWT_SECRET"]);
+
+function buildFixSecrets(): { fixes: SecretSpec[]; lockedFallback: SecretSpec[] } {
   const fixes: SecretSpec[] = [];
+  const lockedFallback: SecretSpec[] = [];
+
+  function add(spec: SecretSpec) {
+    if (LOCKED_BUILTIN_KEYS.has(spec.key)) {
+      lockedFallback.push(spec);
+    } else {
+      fixes.push(spec);
+    }
+  }
 
   if (process.env.OAUTH_SERVER_URL) {
-    fixes.push({
+    add({
       key: "OAUTH_SERVER_URL",
       value: "",
       preventMatching: true,
@@ -54,7 +68,7 @@ function buildFixSecrets(): SecretSpec[] {
   }
 
   if (process.env.OWNER_OPEN_ID) {
-    fixes.push({
+    add({
       key: "OWNER_OPEN_ID",
       value: "",
       preventMatching: true,
@@ -64,7 +78,7 @@ function buildFixSecrets(): SecretSpec[] {
 
   const jwt = process.env.JWT_SECRET ?? "";
   if (!jwt || jwt.length < 32) {
-    fixes.push({
+    add({
       key: "JWT_SECRET",
       value: INCLUDE_JWT ? generateStrongJwtSecret() : "<GENERATE_96_CHAR_HEX_AND_PASTE_HERE>",
       preventMatching: true,
@@ -78,7 +92,7 @@ function buildFixSecrets(): SecretSpec[] {
   const apiUrl = process.env.EXPO_PUBLIC_API_URL;
   const apiBase = process.env.EXPO_PUBLIC_API_BASE_URL;
   if (apiUrl && apiBase && apiUrl !== apiBase) {
-    fixes.push({
+    add({
       key: "EXPO_PUBLIC_API_URL",
       value: "<PRODUCTION_HTTPS_URL>",
       preventMatching: true,
@@ -87,40 +101,69 @@ function buildFixSecrets(): SecretSpec[] {
     });
   }
 
-  return fixes;
+  return { fixes, lockedFallback };
 }
 
 function main() {
-  const secrets = buildFixSecrets();
+  const { fixes, lockedFallback } = buildFixSecrets();
+  const totalCount = fixes.length + lockedFallback.length;
 
-  if (secrets.length === 0) {
+  if (totalCount === 0) {
     console.error("// No env conflicts detected. Nothing to fix.");
     console.error("// Ready to run: pnpm verify:deploy");
     process.exit(0);
   }
 
-  // The shape matches webdev_request_secrets({ secrets: [...] })
-  const payload = { secrets };
-  const output = PRETTY ? JSON.stringify(payload, null, 2) : JSON.stringify(payload);
-
-  // Print a brief instruction header to stderr so it doesn't pollute
-  // the JSON when piped to a tool.
-  console.error(`// Pass this payload to webdev_request_secrets:`);
-  console.error(`//   ${secrets.length} override${secrets.length > 1 ? "s" : ""} required`);
-  if (!INCLUDE_JWT && secrets.some((s) => s.key === "JWT_SECRET")) {
-    console.error(
-      `// JWT_SECRET placeholder is intentional — replace with: $(node -e "console.log(require('crypto').randomBytes(48).toString('hex'))")`,
-    );
-    console.error(
-      `// Or re-run: pnpm fix:env --include-jwt   (be aware: secret will appear in shell output)`,
-    );
+  // ---------------------------------------------------------------------
+  // PRIMARY LANE — webdev_request_secrets payload (tool-fixable conflicts)
+  // ---------------------------------------------------------------------
+  if (fixes.length > 0) {
+    const payload = { secrets: fixes };
+    const output = PRETTY ? JSON.stringify(payload, null, 2) : JSON.stringify(payload);
+    console.error(`// === LANE 1: webdev_request_secrets (${fixes.length} override${fixes.length > 1 ? "s" : ""}) ===`);
+    console.error(`// Pass this payload to webdev_request_secrets, then webdev_restart_server.`);
+    console.error(``);
+    console.log(output);
+    console.error(``);
+  } else {
+    console.error(`// === LANE 1: webdev_request_secrets ===`);
+    console.error(`// (none required — all conflicts are locked-built-in keys, see Lane 2)`);
+    console.error(``);
   }
-  console.error(`// After applying, run: webdev_restart_server then pnpm verify:deploy`);
-  console.error(``);
 
-  // The actual payload goes to stdout so it can be piped:
-  //   pnpm fix:env --pretty | tee fix-payload.json
-  console.log(output);
+  // ---------------------------------------------------------------------
+  // FALLBACK LANE — locked-built-in keys that webdev_request_secrets cannot
+  // override. Print human instructions for the UI fallback path.
+  // ---------------------------------------------------------------------
+  if (lockedFallback.length > 0) {
+    console.error(`// === LANE 2: locked built-in secrets (UI fallback) ===`);
+    console.error(`// The Manus runtime refuses webdev_request_secrets for these keys:`);
+    for (const s of lockedFallback) {
+      const valuePreview =
+        s.key === "JWT_SECRET" && !INCLUDE_JWT
+          ? "<paste fresh 96-char hex from: node -e \"console.log(require('crypto').randomBytes(48).toString('hex'))\">"
+          : JSON.stringify(s.value);
+      console.error(`//   - ${s.key}  →  ${valuePreview}`);
+    }
+    console.error(`//`);
+    console.error(`// Operator action (cannot be done by the agent):`);
+    console.error(`//   1. Open the Manus webdev panel → Settings → Secrets`);
+    console.error(`//   2. For each key listed above, click Edit and paste the value.`);
+    console.error(`//   3. webdev_restart_server({ brief: "reload after UI secret edit" })`);
+    console.error(`//   4. pnpm verify:deploy   # confirm 0 failed`);
+    console.error(`//`);
+    console.error(`// If the UI also refuses edits, set MANUS_RUNTIME_BUILTINS_LOCKED=1 in`);
+    console.error(`// .secrets.local.txt to acknowledge the constraint. The audit will`);
+    console.error(`// downgrade these checks to WARN. Note: with OAuth still gate-open,`);
+    console.error(`// /api/oauth/* WILL mount in production — confirm with the operator`);
+    console.error(`// before shipping. JWT_SECRET will use the runtime placeholder —`);
+    console.error(`// rotate at the earliest opportunity.`);
+    console.error(``);
+  }
+
+  console.error(`// After applying both lanes (where applicable), run:`);
+  console.error(`//   webdev_restart_server`);
+  console.error(`//   pnpm verify:deploy`);
 }
 
 main();
