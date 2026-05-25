@@ -65,7 +65,23 @@ Thumbs.db
 .webdev/
 .project-config.json
 
-# Operator secrets — NEVER commit. Template lives in .secrets.template.txt.
+# ---------------------------------------------------------------------------
+# Operator secrets — NEVER commit.
+#
+# .secrets.local.txt holds EXPO_TOKEN, KEYSTORE_CHOICE, ADMIN_EMAIL/PASSWORD,
+# and any other deploy-time credentials. It is parsed by scripts/load-env.js
+# at server/Expo startup, so values stage automatically without re-entering
+# them through webdev_request_secrets cards every session.
+#
+# Template (safe to commit) lives in .secrets.template.txt. If you need to
+# rotate or share secrets, NEVER copy the populated .secrets.local.txt into
+# git, a chat thread, a screenshot, or any external system. Use a secret
+# manager (1Password, Bitwarden, GitHub Codespaces secrets, etc.) instead.
+#
+# The wildcard .*.secrets.local.txt and *.secrets.local.txt patterns also
+# guard variants like .prod.secrets.local.txt or staging.secrets.local.txt.
+# ---------------------------------------------------------------------------
 .secrets.local.txt
 .secrets.local
 *.secrets.local.txt
+.*.secrets.local.txt
