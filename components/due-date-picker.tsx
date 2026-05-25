@@ -96,46 +96,15 @@ export function DueDatePicker({
     }
   };
 
-  // On web, fall back to the native HTML5 <input type="date"> via a hidden input.
-  const handleWebPickerOpen = () => {
-    if (Platform.OS !== "web") {
-      setPickerOpen(true);
-      return;
-    }
-    if (typeof document === "undefined") return;
-    const input = document.createElement("input");
-    input.type = "date";
-    // Pre-fill with current value if any
-    if (parsed) input.value = toIsoDate(parsed.date);
-    input.style.position = "fixed";
-    input.style.left = "-9999px";
-    document.body.appendChild(input);
-    input.addEventListener("change", () => {
-      if (input.value) {
-        // input.value is YYYY-MM-DD in local time
-        const [y, m, d] = input.value.split("-").map((v) => parseInt(v, 10));
-        const date = new Date(y, m - 1, d);
-        setText(formatLongDate(date));
-        onChange(toIsoDate(date));
-      }
-      document.body.removeChild(input);
-    });
-    // Some browsers need a tick before showPicker is callable
-    setTimeout(() => {
-      try {
-        // showPicker is the modern way; fall back to focus+click
-        const anyInput = input as unknown as { showPicker?: () => void };
-        if (typeof anyInput.showPicker === "function") {
-          anyInput.showPicker();
-        } else {
-          input.focus();
-          input.click();
-        }
-      } catch {
-        input.focus();
-        input.click();
-      }
-    }, 0);
+  // Web change handler for the overlapping hidden HTML5 date input.
+  const handleWebInputChange = (e: { target: { value: string } }) => {
+    const v = e.target.value;
+    if (!v) return;
+    const [y, m, d] = v.split("-").map((s) => parseInt(s, 10));
+    if (!y || !m || !d) return;
+    const date = new Date(y, m - 1, d);
+    setText(formatLongDate(date));
+    onChange(toIsoDate(date));
   };
 
   const initialPickerDate = parsed?.date ?? new Date();
@@ -158,9 +127,9 @@ export function DueDatePicker({
             }}
           />
         </View>
-        <Pressable
-          onPress={handleWebPickerOpen}
-          accessibilityLabel="Open calendar picker"
+
+        {/* Calendar button — opens native picker on iOS/Android, HTML5 picker on web */}
+        <View
           style={{
             width: 48,
             height: 48,
@@ -171,11 +140,48 @@ export function DueDatePicker({
             alignItems: "center",
             justifyContent: "center",
             marginBottom: 2,
+            overflow: "hidden",
+            position: "relative",
           }}
-          hitSlop={4}
         >
           <IconSymbol name="calendar" size={22} color={colors.tint} />
-        </Pressable>
+          {Platform.OS === "web" ? (
+            // A REAL HTML5 date input stretched to fill the button.
+            // Made transparent (opacity:0) but kept on-screen and pointer-event-eligible
+            // so the browser will reliably show the date picker on click.
+            // Using React's web input via createElement keeps RN-Web from stripping it.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (require("react").createElement("input", {
+              type: "date",
+              value: parsed ? toIsoDate(parsed.date) : "",
+              onChange: handleWebInputChange,
+              "aria-label": "Open calendar picker",
+              style: {
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                opacity: 0,
+                cursor: "pointer",
+                border: "none",
+                padding: 0,
+                margin: 0,
+                background: "transparent",
+                color: "transparent",
+              },
+            }) as unknown as React.ReactElement)
+          ) : (
+            <Pressable
+              onPress={() => setPickerOpen(true)}
+              accessibilityLabel="Open calendar picker"
+              hitSlop={4}
+              style={({ pressed }) => [
+                { position: "absolute", inset: 0 },
+                pressed && { opacity: 0.6 },
+              ]}
+            />
+          )}
+        </View>
       </View>
 
       {/* Autofill suggestion chips */}

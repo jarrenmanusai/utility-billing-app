@@ -155,3 +155,7 @@
 - [x] Web fallback for native picker uses HTML5 input type="date" since native picker is no-op on web
 - [x] Vitest covers formatLongDate + suggestDates edge cases (month-only, day-only, partial, year-roll, invalid days, past-skip)
 - [x] Bump version to 1.1.4
+
+## User Feedback — Round 12 (Calendar button click fix)
+- [x] Calendar button next to Due Date opens the picker reliably (web uses overlapping native HTML5 date input; iOS/Android use modal/inline picker)
+- [x] Bump version to 1.1.5
