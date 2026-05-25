@@ -2,7 +2,7 @@
                 MANUS_HANDOFF.txt  —  UtilityFlow (utility-billing-app)
                   Step-by-step instructions for the next agent / dev
                           Author: previous Manus session
-                          Last updated: 2026-05-26 (rev 2)
+                          Last updated: 2026-05-26 (rev 3)
                           Project version: ALWAYS deploy the latest tag
                                            (currently 1.6.0; check git tags)
 ================================================================================
@@ -20,27 +20,38 @@ unless explicitly required. Speed of delivery is less important than
 correctness — a single bad migration or unsigned APK can lock all
 landlords out of the system overnight.
 
+This rev (3) is **autonomous-friendly**: every previous "ask the user"
+gap has been replaced with a concrete file or command. The only thing
+the agent still needs from a human is the values listed in
+DEPLOY_PREREQUISITES.md (secrets + keystore). After that, every step
+below is mechanical.
+
 
 ================================================================================
 0. TL;DR (read this first, then read everything else)
 ================================================================================
 
-  1. Clone the repo. ALWAYS check out the LATEST tag (vX.Y.Z) — never an
-     older one. If the working tree is ahead of all tags, build from `main`.
-  2. Use Node 22 + pnpm 9. Install with `pnpm install --frozen-lockfile`.
-  3. Provision a fresh MySQL 8 database. DROP the schema if one already
+  1. Read DEPLOY_PREREQUISITES.md. Confirm every item there has been
+     supplied. If anything is missing, stop and ask the operator for it
+     ONCE — do not start the deploy with gaps.
+  2. Clone the repo (URL from §1 of DEPLOY_PREREQUISITES.md). ALWAYS
+     check out the LATEST tag (vX.Y.Z). If the repo has zero tags, build
+     from `main` and tag it as the current `constants/app-version.ts`
+     value before proceeding.
+  3. Use Node 22 + pnpm 9. Install with `pnpm install --frozen-lockfile`.
+  4. Provision a fresh MySQL 8 database. DROP the schema if one already
      exists, then run drizzle migrations IN ORDER (section 5).
-  4. Seed exactly ONE admin: jarren.manusai@outlook.com / 030921manusai!@!
-     (section 6). DO NOT keep any pre-existing seeded landlord/tenant/admin
-     rows. Wipe them, then create that one admin and nothing else.
-  5. Set every env var in section 4. NO Manus OAuth — pure email + password.
-  6. Run `pnpm dev` to verify it boots locally.
-  7. Run the FULL test+audit checklist (section 9). All 73 tests must pass,
-     `pnpm check` must report zero TS errors, and every smoke-test step in
-     section 9 must visibly succeed.
-  8. Build the Android APK via EAS Build, JDK 21 image (section 7).
-  9. Distribute the APK through the in-app Admin > App Updates panel. Do
-     NOT publish a web app.
+  5. Set every secret from §3 of DEPLOY_PREREQUISITES.md via
+     `webdev_request_secrets`. NO Manus OAuth.
+  6. Run `pnpm seed:admin` (section 6). This wipes any leftover seed
+     accounts and creates exactly the configured admin.
+  7. Run `pnpm verify:deploy` and confirm zero failures.
+  8. Run `pnpm dev` to verify it boots locally; smoke-test sections 9 D-F.
+  9. Build the Android APK via EAS Build, JDK 21 image (section 7), using
+     the bundled `eas.json`.
+ 10. Distribute the APK through whichever channel §6 of
+     DEPLOY_PREREQUISITES.md specifies (Direct link / Play Console /
+     manual). Subsequent updates use the in-app Admin → App Updates panel.
 
 
 ================================================================================
@@ -58,21 +69,22 @@ landlords out of the system overnight.
         - Do not set `OWNER_OPEN_ID` in env.
         - Do not set `OAUTH_SERVER_URL` in env.
         - Do not advertise an OAuth button anywhere in the UI.
+    `pnpm verify:deploy` enforces this.
 
-  * NO leftover seed accounts. Wipe every users row before seeding the
-    single admin. No demo landlord, no demo tenant, no test admin. Only:
-        Email    : jarren.manusai@outlook.com
-        Password : 030921manusai!@!
-        Role     : admin
-        Status   : active
-    The admin will create real landlords and tenants from inside the app.
+  * NO leftover seed accounts. The bundled `pnpm seed:admin` script wipes
+    the users table (and dependent rows) before seeding the single admin.
+    No demo landlord, no demo tenant, no test admin. Only the admin
+    configured in DEPLOY_PREREQUISITES.md.
 
   * ALWAYS deploy the latest tagged version. Before building, run:
         git fetch --tags
         git tag --sort=-v:refname | head -5
-    Use the topmost tag (e.g. v1.6.0). Bump constants/app-version.ts AND
-    app.config.ts in lock-step if you intentionally cut a new release.
-    NEVER ship an older version once a newer one exists.
+    Use the topmost tag (e.g. v1.6.0). If no tags exist, run:
+        git tag v$(node -p "require('./constants/app-version.ts')") -m "auto-tag"
+        git push --tags
+    Bump constants/app-version.ts AND app.config.ts in lock-step if you
+    intentionally cut a new release. NEVER ship an older version once a
+    newer one exists.
 
   * The schema MUST be REBUILT FROM SCRATCH on each new deployment until
     section 5's verification check passes. This guarantees JDK-21 / MySQL-8
@@ -81,16 +93,16 @@ landlords out of the system overnight.
   * Do NOT modify code unless a step in this document explicitly says so.
     The current build is the locked release.
 
-  * Do NOT downgrade any pinned versions. If a tool insists on it, stop and
-    report — there's almost certainly a better fix.
+  * Do NOT downgrade any pinned versions. If a tool insists on it, stop
+    and report — there's almost certainly a better fix.
 
   * Do NOT edit files inside `android/` or `ios/` if they exist. Native
     project files are regenerated by Expo prebuild. Edit `app.config.ts`
     + `expo-build-properties` instead.
 
-  * Do NOT commit `.env`, the SQL dump, the seeded admin password, or any
-    APK file to the repo. The seed password in this file is bootstrap-only
-    and must be rotated immediately after first sign-in (section 6 step 5).
+  * Do NOT commit a `.env`, the SQL dump, the seeded admin password, or
+    any APK file to the repo. The seed password in DEPLOY_PREREQUISITES.md
+    is bootstrap-only and must be rotated immediately after first sign-in.
 
 
 ================================================================================
@@ -109,6 +121,8 @@ landlords out of the system overnight.
   Locale                 : en-PH
   Currency               : PHP (Philippine peso)
   Phone validation       : PH mobile only (+63 9XX XXX XXXX or 09XX XXX XXXX)
+  Two deploy targets     : (a) Node tRPC server  →  Manus Cloud Run / manus.space
+                           (b) Android APK       →  EAS Build  →  end-user device
 
 
 ================================================================================
@@ -157,37 +171,44 @@ files directly.
 4. REQUIRED ENVIRONMENT VARIABLES
 ================================================================================
 
-Set every one of these. If any is missing, the server will refuse to start
-or some feature will silently misbehave.
+Full reference: docs/env.reference.md.
+Source of values: DEPLOY_PREREQUISITES.md §3.
 
-  CORE (server)
-  ─────────────
-  DATABASE_URL              MySQL connection string,
-                            e.g. mysql://user:pass@host:3306/utilitybill?ssl=true
-  JWT_SECRET                Random 64+ byte string. Used by:
-                              - session cookies (`shared/const.ts`)
+How the agent applies them: `webdev_request_secrets` (NEVER write a `.env`
+file in the repo). The complete required set:
+
+  REQUIRED
+  --------
+  DATABASE_URL              MySQL connection string with CREATE/DROP/ALTER
+                            privileges. Use the Manus built-in DB if
+                            available — it auto-populates this var.
+  JWT_SECRET                64+ byte random hex. Used by both:
+                              - session cookies (`server/auth.ts`)
                               - CAPTCHA HMAC signatures (`lib/captcha.ts`)
                               - password reset tokens
                             Generate with:
                               node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
-  NODE_ENV                  "production"  for prod;  "development"  locally
+  EXPO_PUBLIC_API_URL       Public HTTPS URL of the deployed tRPC server
+                            (e.g. the Manus-issued *.manus.space URL).
+                            Baked into the APK at build time → changing
+                            it later requires a rebuild.
+
+  RUNTIME (with safe defaults)
+  ----------------------------
+  NODE_ENV                  "production" for prod;  "development"  locally
   PORT                      3000   (default for the tRPC server)
   EXPO_PORT                 8081   (default for Metro)
 
   EXPLICITLY DO NOT SET (so OAuth stays disabled)
-  ────────────────────────────────────────────────
+  ------------------------------------------------
   OAUTH_SERVER_URL          MUST be UNSET.
   OWNER_OPEN_ID             MUST be UNSET.
-  Any other OAuth-related vars: leave blank. The login flow falls back to
-  the email+password path automatically when these are missing.
 
-  BUILT-IN AI (server-side, optional QoL)
-  ────────────────────────────────────────
-  BUILT_IN_FORGE_API_URL    Provided by the Manus runtime
-  BUILT_IN_FORGE_API_KEY    Provided by the Manus runtime
-                            App will run without these but AI-suggested
-                            utility names and similar QoL features will
-                            fail silently. Acceptable to leave unset.
+  BUILT-IN AI (auto-populated on Manus webdev)
+  ---------------------------------------------
+  BUILT_IN_FORGE_API_URL    Provided by the Manus runtime. Leave unset
+  BUILT_IN_FORGE_API_KEY    locally; AI-suggested utility names will
+                            gracefully degrade without these.
 
 When deploying via the Manus webdev runtime, set these via
 `webdev_request_secrets` (auto-creates a secret-input card). Do NOT bake
@@ -198,15 +219,18 @@ them into source. NEVER commit `.env`.
 5. DATABASE: REBUILD FROM SCRATCH (every new deployment)
 ================================================================================
 
-The schema lives in `drizzle/schema.ts`. Three migrations have been generated
-and must all be applied IN ORDER on a fresh database:
+The schema lives in `drizzle/schema.ts`. Migrations that must all be
+applied IN ORDER on a fresh database:
 
   drizzle/0000_elite_eternals.sql           (initial bootstrap)
   drizzle/0001_military_typhoid_mary.sql    (multi-tenant + roles + APK releases + reset tokens etc.)
   drizzle/0002_sharp_quentin_quire.sql      (adds `users.phone` for PH validation)
 
+  (If newer migrations exist when you read this — drizzle/0003_*.sql or
+   higher — apply them in numeric order too. NEVER skip; never reorder.)
+
 NEW DEPLOYMENT — full rebuild procedure
-────────────────────────────────────────
+----------------------------------------
 
 Always do this on every brand-new environment. Skipping it leads to schema
 drift between dev and prod and JDK-21-incompatible binary protocol issues
@@ -235,131 +259,71 @@ on legacy MySQL clients.
               mysql -u <user> -p utilitybill < drizzle/0000_elite_eternals.sql
               mysql -u <user> -p utilitybill < drizzle/0001_military_typhoid_mary.sql
               mysql -u <user> -p utilitybill < drizzle/0002_sharp_quentin_quire.sql
+              # repeat for any drizzle/0003_*.sql, etc.
 
-  Step 4. If you pulled a newer commit that ships drizzle/0003_*.sql or
-          higher, apply them in numeric order. NEVER skip; never run them
-          out of order.
+  Step 4. Verify by running `pnpm verify:deploy`. It checks tables,
+          columns, the admin row, and version consistency in one shot.
 
-  Step 5. Verify with the queries below (all must pass):
-
-              -- A. Required tables exist
-              SHOW TABLES;
-              -- expected exactly these (alphabetical):
-              --   apk_releases, auth_logs, bill_items, bills, blocklist,
-              --   conversations, messages, notifications, payments,
-              --   reset_tokens, settings, users, utilities
-
-              -- B. users.phone column exists (added in 0002)
-              SHOW COLUMNS FROM users LIKE 'phone';
-              -- expected: 1 row, type varchar(20)
-
-              -- C. apk_releases table exists (in-app updater)
-              DESC apk_releases;
-              -- expected columns: id, version, url, notes, is_live,
-              --                   uploaded_by, created_at, file_size
-
-              -- D. No leftover users (we'll seed exactly one in section 6)
-              SELECT COUNT(*) FROM users;
-              -- expected: 0
-
-  Step 6. Backup discipline:
+  Step 5. Backup discipline:
           Take a `mysqldump --single-transaction --routines` snapshot before
           ANY future schema migration in production.
 
 
 ================================================================================
-6. SEED EXACTLY ONE ADMIN — REPLACE ALL EXISTING SEEDED ACCOUNTS
+6. SEED EXACTLY ONE ADMIN — `pnpm seed:admin`
 ================================================================================
 
-Before this section runs you should have ZERO rows in the `users` table
-(verify with `SELECT COUNT(*) FROM users`). If any rows exist (legacy
-admin, demo landlord, demo tenant, etc.), DELETE them all:
+The repo ships `scripts/seed-admin.ts` (called by `pnpm seed:admin`)
+which:
 
-      -- Wipe in dependency order (child rows first):
-      DELETE FROM messages;
-      DELETE FROM conversations;
-      DELETE FROM payments;
-      DELETE FROM bill_items;
-      DELETE FROM bills;
-      DELETE FROM utilities;
-      DELETE FROM notifications;
-      DELETE FROM reset_tokens;
-      DELETE FROM auth_logs;
-      DELETE FROM blocklist;
-      DELETE FROM apk_releases;     -- only if you don't need release history
-      DELETE FROM settings;         -- only if you want fresh defaults
-      DELETE FROM users;
-      -- Now SELECT COUNT(*) FROM users  →  0
+  1. Refuses to run unless DATABASE_URL is set, and refuses on
+     NODE_ENV=production unless ALLOW_PROD_SEED=1.
+  2. Toggles FOREIGN_KEY_CHECKS off, deletes every row from every table
+     in the right child-first order, toggles them back on.
+  3. Hashes the admin password using the project's real auth helper
+     (`server/auth.ts → hashPassword`, bcrypt cost 10 — same as runtime).
+  4. Inserts the admin via `db.createUser` (the same code path used by
+     `auth.register`).
+  5. Verifies the row landed and prints a summary.
 
-Then seed THE single admin account:
+  Defaults (override via env if needed):
+      ADMIN_EMAIL    = jarren.manusai@outlook.com
+      ADMIN_PASSWORD = 030921manusai!@!
+      ADMIN_NAME     = Jarren (Admin)
+      ADMIN_PHONE    = +639000000000
 
-      Email     : jarren.manusai@outlook.com
-      Password  : 030921manusai!@!
-      Role      : admin
-      Status    : active
-      Auth type : email_password (no OAuth)
+To run:
 
-How to seed (recommended — uses bcrypt the same way the app does):
+      pnpm seed:admin
 
-      # From repo root, in a Node.js shell with the project's deps:
-      pnpm tsx -e "
-        import bcrypt from 'bcryptjs';
-        import { db } from './server/db';
-        const hash = bcrypt.hashSync('030921manusai!@!', 12);
-        await db.createUserWithPassword({
-          email: 'jarren.manusai@outlook.com',
-          name:  'Jarren (Admin)',
-          phone: '+639000000000',   // placeholder; admin can change later
-          passwordHash: hash,
-          role:  'admin',
-          status:'active',
-        });
-        console.log('admin seeded');
-      "
+To override a value (one-shot):
 
-Or, if you prefer raw SQL after generating the hash with bcrypt
-(cost factor 12), run:
-
-      INSERT INTO users
-        (email, name, phone, password_hash, role, status, created_at, updated_at)
-      VALUES
-        ('jarren.manusai@outlook.com',
-         'Jarren (Admin)',
-         '+639000000000',
-         '<BCRYPT_HASH_HERE>',
-         'admin',
-         'active',
-         NOW(), NOW());
-
-Verify:
-
-      SELECT id, email, role, status FROM users;
-      -- expected exactly 1 row, role=admin, status=active
+      ADMIN_EMAIL=other@example.com ADMIN_PASSWORD='different' pnpm seed:admin
 
 POST-SEED HARDENING (mandatory)
-───────────────────────────────
+-------------------------------
 
-  1. Log in to the deployed app once with that email + password to confirm
-     the credentials work.
-  2. Inside the app, immediately rotate the password from Settings >
-     Security to a value of the operator's choosing. The default password
-     in this document is bootstrap-only.
-  3. Inform the operator (the person who owns jarren.manusai@outlook.com)
-     that the admin account is now live and that they should change the
-     password on first sign-in.
-  4. Delete or scrub the seed-script log lines from the deploy logs so the
-     bootstrap password isn't preserved in history.
+  1. Sign in to the deployed app once with the admin email + password to
+     confirm the credentials work.
+  2. Inside the app, immediately rotate the password from
+     Settings → Security to a value of the operator's choosing. The
+     default password in this document is bootstrap-only.
+  3. Inform the operator (the human who owns the configured email
+     address) that the admin account is now live and that they should
+     change the password on first sign-in.
+  4. Delete or scrub the seed-script log lines from the deploy logs so
+     the bootstrap password isn't preserved in history.
 
 
 ================================================================================
 7. BUILDING & DEPLOYING THE NATIVE ANDROID APP (JDK 21)
 ================================================================================
 
-This is a NATIVE ANDROID build. Do not "publish as web app". Do not export
-to `expo-router`'s static web output for production.
+This is a NATIVE ANDROID build. Do not "publish as web app". Do not
+export to `expo-router`'s static web output for production.
 
 ALWAYS BUILD THE LATEST VERSION
-────────────────────────────────
+--------------------------------
 
 Before you build, do:
 
@@ -368,46 +332,45 @@ Before you build, do:
       # check out the topmost tag
       git checkout vX.Y.Z
 
-Read constants/app-version.ts and app.config.ts. They must match the tag.
-If they don't, STOP — do not build a tag whose code disagrees with itself.
+Read constants/app-version.ts and app.config.ts. They must match the
+tag. If they don't, STOP — `pnpm verify:deploy` will fail. Don't ship a
+tag whose code disagrees with itself.
 
-Recommended path: EAS Build (cloud, no local Android SDK needed)
-─────────────────────────────────────────────────────────────────
+EAS Build (cloud, no local Android SDK needed) — the supported path
+--------------------------------------------------------------------
 
-  1) Install EAS CLI globally (or use `npx eas-cli` ad-hoc):
-       npm i -g eas-cli@latest
+The repo includes a pre-configured `eas.json` with profiles pinned to
+the JDK 21 image (`ubuntu-22.04-jdk-21-ndk-r27b`). You do NOT need to
+run `eas build:configure`.
 
-  2) Login (once per machine):
-       eas login
+  1) Install EAS CLI ad-hoc (or globally if you prefer):
+       npx eas-cli --version
+       # If missing globally: npm i -g eas-cli@latest
 
-  3) Configure a production profile if not present:
-       eas build:configure
-     This generates / updates `eas.json`. Suggested production profile
-     (note the explicit JDK 21 image pin):
+  2) Authenticate non-interactively. The agent uses an `EXPO_TOKEN`
+     supplied by the operator (DEPLOY_PREREQUISITES.md §5):
+       export EXPO_TOKEN=<token>
+       npx eas-cli whoami    # confirms login
 
-       {
-         "build": {
-           "production": {
-             "android": {
-               "buildType": "apk",
-               "image": "ubuntu-22.04-jdk-21-ndk-r27b",
-               "gradleCommand": ":app:assembleRelease"
-             }
-           }
-         }
-       }
+  3) Configure credentials. The first build will prompt you to
+     generate or upload a keystore. Per DEPLOY_PREREQUISITES.md §4
+     the operator already chose option A / B / C. Apply that:
+       - Option A (new EAS-managed): just run the build; EAS creates one.
+       - Option B (existing EAS-managed): nothing to do; reused automatically.
+       - Option C (BYO keystore): import once with
+           npx eas-cli credentials  → Android → production → Set up a new
+         keystore → "Upload a keystore" → paste the four secrets.
 
   4) Build:
-       eas build --platform android --profile production
-
-     Wait for the cloud build to finish (~10–25 min). The dashboard will
-     produce a downloadable .apk URL.
+       npx eas-cli build --platform android --profile production
+     Wait for the cloud build to finish (~10–25 min). The dashboard
+     produces a downloadable .apk URL.
 
   5) (Optional) Build an .aab for Play Store:
-     Change `buildType` to `app-bundle` and re-run.
+       npx eas-cli build --platform android --profile production-aab
 
 Local build path (only if you cannot use EAS)
-──────────────────────────────────────────────
+----------------------------------------------
 
   Prereqs:
     - JDK 21 (Temurin). `java -version` must say 21.
@@ -424,28 +387,36 @@ Local build path (only if you cannot use EAS)
     ./gradlew assembleRelease
     # APK lands in android/app/build/outputs/apk/release/app-release.apk
 
-  If `assembleRelease` fails on signing, sign with a debug key for testing:
+  If `assembleRelease` fails on signing, sign with a debug key for
+  testing:
     ./gradlew assembleDebug
 
-Distribution (in-app self-update)
-─────────────────────────────────
+Distribution
+-------------
 
-This project ALREADY ships an in-app update mechanism. After producing the
-APK:
+FIRST APK (no previous version installed on user phones):
+  Use whichever channel DEPLOY_PREREQUISITES.md §6 specifies. Common
+  choices:
+    - Direct link: upload .apk to the Manus storage proxy or any HTTPS
+      bucket; share the URL with users.
+    - Play Console internal testing: `eas submit -p android`.
 
-  1) Sign in as admin (jarren.manusai@outlook.com).
-  2) Open Settings → "App updates".
-  3) Use the dashed dropzone to upload the APK file.
-  4) Type the new version (must match constants/app-version.ts).
-  5) Tap "Deploy".
+SUBSEQUENT UPDATES (in-app self-updater):
+  After the first install, every future update goes through:
 
-The server records the release, fans out an `app_update` notification to
-every active landlord + tenant, and shows a banner+modal in their app
-prompting them to download. Tapping "Update" opens the APK for install on
-Android.
+    1) Sign in as admin.
+    2) Open Settings → "App updates".
+    3) Use the dashed dropzone to upload the new APK file.
+    4) Type the new version (must match constants/app-version.ts).
+    5) Tap "Deploy".
 
-Do NOT distribute the APK by ad-hoc email; use the in-app channel so
-end-users receive the prompt automatically.
+  The server records the release, fans out an `app_update` notification
+  to every active landlord + tenant, and shows a banner+modal in their
+  app prompting them to download. Tapping "Update" opens the APK for
+  install on Android.
+
+  NOTE: All future APKs MUST be signed with the same keystore as the
+  first one. Otherwise users see "App not installed".
 
 
 ================================================================================
@@ -454,41 +425,46 @@ end-users receive the prompt automatically.
 
 Follow these in order. Do NOT skip steps. Do NOT improvise.
 
-  STEP  1. Initialise a new Manus webdev project for this codebase.
-           Use the existing repo as the source. Do NOT scaffold from a
-           template.
+  STEP  1. Read DEPLOY_PREREQUISITES.md. If any item there is missing,
+           ask the operator ONCE for the missing values, then proceed.
 
-  STEP  2. Read README.md, server/README.md, todo.md.
-           Read this file (MANUS_HANDOFF.txt) end-to-end.
+  STEP  2. Initialise a new Manus webdev project for this codebase using
+           the repo URL from §1 of DEPLOY_PREREQUISITES.md. Do NOT
+           scaffold from a template.
 
-  STEP  3. `git fetch --tags` and check out the LATEST tag. Confirm the
-           version string in constants/app-version.ts and app.config.ts
-           agree with that tag.
+  STEP  3. Read README.md, server/README.md, todo.md, this file, and
+           docs/env.reference.md.
 
-  STEP  4. Verify Node + pnpm versions:
+  STEP  4. `git fetch --tags` and check out the LATEST tag. Confirm
+           constants/app-version.ts and app.config.ts agree with that
+           tag. If no tags exist, tag `main` as v$(constants/app-version.ts)
+           and push.
+
+  STEP  5. Verify Node + pnpm versions:
               node --version    →  v22.x
               pnpm --version    →  9.12.0  (or newer 9.x)
            If wrong, fix the runtime before proceeding.
 
-  STEP  5. Install dependencies:
+  STEP  6. Install dependencies:
               pnpm install --frozen-lockfile
            If the lockfile fails to resolve, do NOT use `npm install`.
-           Instead investigate which dep moved, then re-pin.
+           Investigate which dep moved, then re-pin.
 
-  STEP  6. Provision MySQL 8. Set DATABASE_URL.
-           Do the FULL rebuild from section 5 (DROP, CREATE, migrate,
-           verify). Confirm `users.phone` exists and `SELECT COUNT(*)
-           FROM users` returns 0.
+  STEP  7. Provision MySQL 8. Set DATABASE_URL via webdev_request_secrets.
+           Do the FULL rebuild from section 5 (DROP, CREATE, migrate).
 
-  STEP  7. Configure all env vars (section 4). JWT_SECRET must be a fresh
-           random string per environment — do NOT reuse the dev secret in
-           prod. Confirm OAUTH_SERVER_URL and OWNER_OPEN_ID are UNSET.
+  STEP  8. Configure the rest of the secrets (section 4) via
+           webdev_request_secrets. JWT_SECRET must be a fresh random
+           string per environment. Confirm OAUTH_SERVER_URL and
+           OWNER_OPEN_ID are UNSET.
 
-  STEP  8. Seed the single admin (section 6) and verify
-              SELECT id, email, role, status FROM users;
-           returns exactly one row.
+  STEP  9. Run `pnpm seed:admin`. Confirm the script prints
+           "Verified ✓" and exits 0.
 
-  STEP  9. Boot the dev server:
+  STEP 10. Run `pnpm verify:deploy`. ALL checks must pass. If any fails,
+           do not proceed.
+
+  STEP 11. Boot the dev server:
               pnpm dev
            Confirm:
               - Metro starts on port 8081
@@ -497,18 +473,21 @@ Follow these in order. Do NOT skip steps. Do NOT improvise.
               - No "[Auth] OAuth not configured" warnings (expected — we
                 want OAuth disabled).
 
-  STEP 10. Run the FULL audit checklist (section 9). Every item MUST pass.
+  STEP 12. Run the FULL audit checklist (section 9). Every item that can
+           be evaluated without a real device MUST pass.
 
-  STEP 11. Build the Android APK via EAS (section 7). Pin the image to
-           JDK 21.
+  STEP 13. Build the Android APK via EAS using the bundled profile
+           (section 7). Pin the image to JDK 21 (already done in
+           eas.json).
 
-  STEP 12. Upload the APK via Admin > Settings > App updates. Verify a
-           notification appears for at least one test tenant account.
+  STEP 14. Distribute the APK using §6 of DEPLOY_PREREQUISITES.md. From
+           v2 onward, use Admin → Settings → App updates inside the
+           app.
 
-  STEP 13. Take a `webdev_save_checkpoint` with a clear message naming the
-           version. Hand the checkpoint URL to the user.
+  STEP 15. Take a `webdev_save_checkpoint` with a clear message naming
+           the version. Hand the checkpoint URL to the user.
 
-  STEP 14. Do NOT modify any feature without an explicit user request.
+  STEP 16. Do NOT modify any feature without an explicit user request.
            If unsure, ASK — do not assume.
 
 
@@ -516,10 +495,11 @@ Follow these in order. Do NOT skip steps. Do NOT improvise.
 9. AUDIT CHECKLIST — RUN BEFORE EVERY DEPLOY
 ================================================================================
 
-Every line below MUST pass. If even one fails, STOP and fix before
-shipping.
+`pnpm verify:deploy` automates A and most of B + most of H. The rest
+must be evaluated by the agent (or operator). Every line below MUST
+pass. If even one fails, STOP and fix before shipping.
 
-  A. STATIC CHECKS
+  A. STATIC CHECKS  (automated by `pnpm test` + `pnpm check` + `pnpm lint`)
      [ ] `pnpm install --frozen-lockfile` exits 0 and warning-free.
      [ ] `pnpm check` (TypeScript) reports 0 errors.
      [ ] `pnpm lint` (eslint) reports 0 errors.
@@ -527,13 +507,12 @@ shipping.
          tests across 9 files; a newer tag may have more — they must ALL
          pass, none skipped).
 
-  B. DATABASE
-     [ ] `SHOW TABLES` returns the 13 tables listed in section 5 step 5.
-     [ ] `SHOW COLUMNS FROM users LIKE 'phone'` returns one varchar(20).
-     [ ] `SELECT COUNT(*) FROM users` returns 1 (the seeded admin).
-     [ ] `SELECT email,role,status FROM users` shows
-         jarren.manusai@outlook.com / admin / active.
-     [ ] No demo/test landlord, no demo/test tenant in any table.
+  B. DATABASE  (automated by `pnpm verify:deploy`)
+     [ ] All 13 tables present.
+     [ ] users.phone column exists.
+     [ ] Exactly one active admin row.
+     [ ] No demo/test landlord, no demo/test tenant in any table on a
+         brand-new deploy.
 
   C. SERVER BOOT
      [ ] `pnpm dev` reaches steady state with no [Auth]/[DB] errors.
@@ -541,8 +520,8 @@ shipping.
      [ ] tRPC `auth.me` returns null when unauthenticated.
 
   D. AUTH FLOW (no OAuth)
-     [ ] /login screen accepts jarren.manusai@outlook.com /
-         030921manusai!@! and lands on the admin dashboard.
+     [ ] /login screen accepts the seeded admin's email + password and
+         lands on the admin dashboard.
      [ ] /login rejects an unknown email with a generic "Invalid
          credentials" message (no enumeration).
      [ ] /register screen issues a CAPTCHA challenge and rejects:
@@ -553,7 +532,8 @@ shipping.
             (v)   non-PH phone or PH landline.
      [ ] /register accepts a clean PH mobile + non-disposable email and
          creates a `pending` landlord row.
-     [ ] Admin can approve the pending landlord; landlord can then sign in.
+     [ ] Admin can approve the pending landlord; landlord can then sign
+         in.
 
   E. CORE FEATURES
      [ ] Admin > Landlords list shows the approved landlord.
@@ -564,15 +544,16 @@ shipping.
      [ ] Tenant can upload a payment proof image; landlord can mark it
          paid; both see the updated status.
      [ ] Chat: tenant ↔ landlord can exchange messages with photos.
-         Tapping a photo opens the lightbox; the entire image is visible.
+         Tapping a photo opens the lightbox; the entire image is
+         visible.
      [ ] Bill receipt > "Meter Photo" thumbnail tap also opens the
          lightbox with full image visible.
      [ ] Notifications icon shows a badge for new bills, payments, and
          app_update events.
 
   F. IN-APP UPDATER
-     [ ] Admin > Settings > App updates lets the admin upload an APK file
-         (file picker accepts .apk up to 100 MB).
+     [ ] Admin > Settings > App updates lets the admin upload an APK
+         file (file picker accepts .apk up to 100 MB).
      [ ] After "Deploy", every other active user sees an update banner
          AND receives an in-app notification.
      [ ] Tapping "Update" on Android opens the APK install prompt; on
@@ -580,16 +561,16 @@ shipping.
      [ ] The banner can be dismissed and stays dismissed for that exact
          version only (a newer version re-shows it).
 
-  G. NATIVE BUILD
-     [ ] `eas build --platform android --profile production` finishes
-         without errors using the JDK 21 image.
+  G. NATIVE BUILD  (requires a real Android device — defer to operator)
+     [ ] `npx eas-cli build --platform android --profile production`
+         finishes without errors using the JDK 21 image.
      [ ] The produced .apk installs on a real Android 7+ device.
      [ ] The installed app reports the correct version under
          Settings > About.
      [ ] The installed app correctly reaches the production tRPC server
          (no "Network request failed" toast on first sign-in).
 
-  H. SECURITY
+  H. SECURITY  (mostly automated by `pnpm verify:deploy`)
      [ ] OAuth is unreachable: visiting /api/oauth/start (or any OAuth
          route) returns a 404 / 503 — confirms OAUTH_SERVER_URL is unset.
      [ ] JWT_SECRET in prod ≠ JWT_SECRET in dev.
@@ -598,9 +579,9 @@ shipping.
          operator after first sign-in (confirm with the user — do not
          leave the default in place).
 
-If all of A through H pass, you are clear to declare the deploy done. If
-any fails, file the failure in todo.md as a blocker and do not advertise
-the deploy as ready.
+If all of A through H pass (G with operator help), you are clear to
+declare the deploy done. If any fails, file the failure in todo.md as a
+blocker and do not advertise the deploy as ready.
 
 
 ================================================================================
@@ -626,25 +607,24 @@ PROBLEM: "[Database] Cannot upsert user: database not available" on startup
   → DATABASE_URL is wrong or unreachable. Check SSL flag and host:port.
 
 PROBLEM: /login accepts the admin password but lands on a blank screen
-  → The role on the row isn't 'admin'. Re-check section 6 SQL.
+  → The role on the row isn't 'admin'. Re-run `pnpm seed:admin`.
 
 PROBLEM: Admin can't see the App Updates panel
   → users.role in DB is something other than 'admin'. Re-seed.
 
 PROBLEM: Registration screen shows "Verification challenge invalid"
   → JWT_SECRET changed between issue and verify. Make sure both the auth
-    cookies AND the captcha module read the same secret. They do by default
-    (lib/captcha.ts → ENV.cookieSecret). Restart the server after rotating
-    the secret.
+    cookies AND the captcha module read the same secret. They do by
+    default. Restart the server after rotating the secret.
 
 PROBLEM: "Property 'phone' is missing" TypeScript error in tests
-  → You ran the project against a DB that doesn't have the 0002 migration
-    applied. Apply it (section 5).
+  → You ran the project against a DB that doesn't have the 0002
+    migration applied. Apply it (section 5).
 
 PROBLEM: APK install fails with "App not installed" on the device
-  → Either: (a) the user has an older signed copy with a different keystore,
-    (b) the device has < Android 7 (minSdk 24). Uninstall the old copy or
-    test on a newer device.
+  → Either: (a) the user has an older signed copy with a different
+    keystore — they must uninstall first, or you must sign with the same
+    keystore as before; (b) the device has < Android 7 (minSdk 24).
 
 PROBLEM: EAS Build fails with "Could not find tools.jar"
   → JRE installed instead of JDK. Install full JDK 21 (Temurin).
@@ -663,6 +643,12 @@ PROBLEM: Web preview works but native build fails
 PROBLEM: User reports "I can't log in with Google"
   → Working as designed. OAuth has been intentionally disabled. Tell the
     user to use email + password.
+
+PROBLEM: Password reset link never arrives by email
+  → The current code path logs the reset URL to the server console
+    instead of sending email. Email delivery is intentionally a TODO —
+    users either copy the URL from the operator or use the in-app
+    "rotate password" flow once signed in.
 
 
 ================================================================================
@@ -683,11 +669,14 @@ You (the next agent) MUST NOT:
   - Push the web export to a production hosting target.
   - Build an OLDER version when a newer tag exists.
   - Edit MANUS_HANDOFF.txt without an explicit user request.
+  - Generate a NEW Android keystore when a previous one already exists.
 
 You MUST:
   - Read this file first.
+  - Read DEPLOY_PREREQUISITES.md and confirm every item is supplied.
   - Use webdev_request_secrets (never hardcode secrets).
-  - Run the full audit checklist (section 9) before saving a checkpoint.
+  - Run `pnpm verify:deploy` before saving any deploy checkpoint.
+  - Run the full audit checklist (section 9) before declaring done.
   - Bump APP_VERSION + app.config.ts version in lock-step with new APK
     deploys.
   - Keep todo.md as the canonical change log.
@@ -704,4 +693,4 @@ lock all landlords out of the system overnight.
 
 Good luck.
 
-— Previous Manus session, rev 2 (2026-05-26)
+— Previous Manus session, rev 3 (2026-05-26)

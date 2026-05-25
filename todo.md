@@ -305,3 +305,12 @@
 - [x] Add full DB rebuild-from-scratch procedure (DROP + CREATE + migrate)
 - [x] Add "always deploy the latest tag" policy
 - [x] Add comprehensive audit checklist (sections A-H, all must pass)
+
+## User Feedback — Round 29 (2026-05-26)
+- [x] Cold-eyes review of MANUS_HANDOFF.txt
+- [x] Add scripts/seed-admin.ts (real bcrypt + db.createUser path)
+- [x] Add scripts/verify-deploy.ts + `pnpm seed:admin` + `pnpm verify:deploy`
+- [x] Add eas.json with JDK 21 build profiles
+- [x] Add docs/env.reference.md
+- [x] Add DEPLOY_PREREQUISITES.md (operator-supplied secrets/keystore)
+- [x] Rewrite MANUS_HANDOFF.txt as rev 3 (autonomous-friendly)
