@@ -64,3 +64,8 @@ Thumbs.db
 # Webdev artifacts (checkpoint zips, migrations, etc.)
 .webdev/
 .project-config.json
+
+# Operator secrets — NEVER commit. Template lives in .secrets.template.txt.
+.secrets.local.txt
+.secrets.local
+*.secrets.local.txt

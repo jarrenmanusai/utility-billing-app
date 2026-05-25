@@ -39,10 +39,15 @@ below is mechanical.
      from `main` and tag it as the current `constants/app-version.ts`
      value before proceeding.
   3. Use Node 22 + pnpm 9. Install with `pnpm install --frozen-lockfile`.
+     Before doing ANYTHING else, check for `.secrets.local.txt` in the
+     project root (see section 3a). If present, parse it and call
+     `webdev_request_secrets` for each non-comment KEY=VALUE line —
+     DO NOT ask the human for any secret that file already contains.
   4. Provision a fresh MySQL 8 database. DROP the schema if one already
      exists, then run drizzle migrations IN ORDER (section 5).
   5. Set every secret from §3 of DEPLOY_PREREQUISITES.md via
-     `webdev_request_secrets`. NO Manus OAuth.
+     `webdev_request_secrets`. Auto-loaded values from
+     `.secrets.local.txt` count — do not re-ask. NO Manus OAuth.
   6. Run `pnpm seed:admin` (section 6). This wipes any leftover seed
      accounts and creates exactly the configured admin.
   7. Run `pnpm verify:deploy` and confirm zero failures.
@@ -213,6 +218,56 @@ file in the repo). The complete required set:
 When deploying via the Manus webdev runtime, set these via
 `webdev_request_secrets` (auto-creates a secret-input card). Do NOT bake
 them into source. NEVER commit `.env`.
+
+IF `.secrets.local.txt` EXISTS in the project root: see section 3a. The
+agent must parse it FIRST and pre-register every KEY=VALUE pair with
+`webdev_request_secrets`, then ONLY ask the human for values still
+missing afterwards. The human is never asked twice for the same value.
+
+
+================================================================================
+4a. AUTO-LOADING SECRETS FROM .secrets.local.txt (sections 3a)
+================================================================================
+
+The project root MAY contain a file named `.secrets.local.txt` (gitignored).
+It looks like this:
+
+    # comments allowed
+    EXPO_TOKEN=expo_abc123...
+    BOOTSTRAP_ADMIN_EMAIL=jarren.manusai@outlook.com
+    BOOTSTRAP_ADMIN_PASSWORD=...
+    # JWT_SECRET=optional
+
+WHEN THIS FILE EXISTS, THE AGENT MUST:
+
+  1. Parse it line-by-line. Skip blank lines and lines starting with `#`.
+  2. For each `KEY=VALUE` line, call `webdev_request_secrets` with that
+     KEY/VALUE pair so the value is registered in the deploy environment.
+  3. NEVER print the VALUE in chat or logs. Print only the KEY name.
+  4. NEVER copy `.secrets.local.txt` into a checkpoint or commit it. It
+     is in `.gitignore` and must stay there.
+  5. After loading, the agent only asks the human about secrets NOT
+     present in the file. Specifically:
+       - DATABASE_URL is auto-provisioned by Manus webdev runtime.
+       - EXPO_PUBLIC_API_URL is set by the agent itself AFTER server
+         deploy (see Phase 2F).
+       - Anything else missing: ONE blocking question.
+  6. Validate the file's content:
+       * Reject any line containing `OAUTH_SERVER_URL` or `OWNER_OPEN_ID`
+         (production must use email+password only, hard rule §1).
+       * Warn if `BOOTSTRAP_ADMIN_PASSWORD` looks too short (<10 chars)
+         or matches a known weak default.
+  7. After all secrets are registered, run `pnpm verify:deploy`. The
+     auditor checks that EXPO_TOKEN, JWT_SECRET, and DATABASE_URL are
+     present and that no OAuth env vars are set.
+
+A template lives at `.secrets.template.txt` (committed). Operators copy
+it, fill values, and drop the result into the sandbox before starting
+the Manus session.
+
+IF NO .secrets.local.txt EXISTS:
+  Fall back to the standard §4 flow: ask the operator for each secret
+  individually via `webdev_request_secrets` cards.
 
 
 ================================================================================
