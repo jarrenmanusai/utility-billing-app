@@ -1,0 +1,573 @@
+import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/mysql2";
+import {
+  authLogs,
+  billItems,
+  bills,
+  blocklist,
+  conversations,
+  messages,
+  notifications,
+  payments,
+  resetTokens,
+  settings,
+  users,
+  utilities,
+  type InsertAuthLog,
+  type InsertBill,
+  type InsertBillItem,
+  type InsertMessage,
+  type InsertNotification,
+  type InsertPayment,
+  type InsertResetToken,
+  type InsertUser,
+  type InsertUtility,
+} from "./schema.js";
+
+let _db: ReturnType<typeof drizzle> | null = null;
+
+export function getDb() {
+  if (!_db && process.env.DATABASE_URL) {
+    try {
+      _db = drizzle(process.env.DATABASE_URL);
+    } catch (error) {
+      console.warn("[Database] Failed to connect:", error);
+      _db = null;
+    }
+  }
+  return _db;
+}
+
+function requireDb() {
+  const db = getDb();
+  if (!db) throw new Error("Database not available");
+  return db;
+}
+
+// ============================================================
+// USERS
+// ============================================================
+
+export async function getUserById(id: number) {
+  const db = requireDb();
+  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getUserByEmail(email: string) {
+  const db = requireDb();
+  const result = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, email.toLowerCase()))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getUserByPhone(phone: string) {
+  const db = requireDb();
+  const result = await db
+    .select()
+    .from(users)
+    .where(eq(users.phone, phone))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function createUser(data: InsertUser): Promise<number> {
+  const db = requireDb();
+  if (data.email) data.email = data.email.toLowerCase();
+  const res = await db.insert(users).values(data);
+  return Number((res as any)[0]?.insertId ?? (res as any).insertId);
+}
+
+export async function updateUser(id: number, patch: Partial<InsertUser>): Promise<void> {
+  const db = requireDb();
+  if (patch.email) patch.email = patch.email.toLowerCase();
+  await db.update(users).set(patch).where(eq(users.id, id));
+}
+
+export async function listTenantsByLandlord(landlordId: number) {
+  const db = requireDb();
+  return db
+    .select()
+    .from(users)
+    .where(
+      and(
+        eq(users.landlordId, landlordId),
+        eq(users.role, "tenant"),
+        or(isNull(users.deletedAt), eq(users.status, "active"), eq(users.status, "frozen")),
+      ),
+    )
+    .orderBy(desc(users.createdAt));
+}
+
+export async function listLandlords(status?: "pending" | "active" | "frozen" | "deleted") {
+  const db = requireDb();
+  if (status) {
+    return db
+      .select()
+      .from(users)
+      .where(and(eq(users.role, "landlord"), eq(users.status, status)))
+      .orderBy(desc(users.createdAt));
+  }
+  return db.select().from(users).where(eq(users.role, "landlord")).orderBy(desc(users.createdAt));
+}
+
+export async function countPendingLandlords(): Promise<number> {
+  const db = requireDb();
+  const res = await db
+    .select({ c: sql<number>`count(*)` })
+    .from(users)
+    .where(and(eq(users.role, "landlord"), eq(users.status, "pending")));
+  return Number(res[0]?.c ?? 0);
+}
+
+// ============================================================
+// UTILITIES
+// ============================================================
+
+export async function listUtilities(landlordId: number) {
+  const db = requireDb();
+  return db
+    .select()
+    .from(utilities)
+    .where(eq(utilities.landlordId, landlordId))
+    .orderBy(utilities.name);
+}
+
+export async function createUtility(data: InsertUtility) {
+  const db = requireDb();
+  const res = await db.insert(utilities).values(data);
+  return Number((res as any)[0]?.insertId ?? (res as any).insertId);
+}
+
+export async function updateUtility(id: number, patch: Partial<InsertUtility>) {
+  const db = requireDb();
+  await db.update(utilities).set(patch).where(eq(utilities.id, id));
+}
+
+export async function deleteUtility(id: number) {
+  const db = requireDb();
+  await db.delete(utilities).where(eq(utilities.id, id));
+}
+
+export async function getUtility(id: number) {
+  const db = requireDb();
+  const r = await db.select().from(utilities).where(eq(utilities.id, id)).limit(1);
+  return r[0];
+}
+
+// ============================================================
+// BILLS
+// ============================================================
+
+export async function createBill(data: InsertBill) {
+  const db = requireDb();
+  const res = await db.insert(bills).values(data);
+  return Number((res as any)[0]?.insertId ?? (res as any).insertId);
+}
+
+export async function updateBill(id: number, patch: Partial<InsertBill>) {
+  const db = requireDb();
+  await db.update(bills).set(patch).where(eq(bills.id, id));
+}
+
+export async function getBill(id: number) {
+  const db = requireDb();
+  const r = await db.select().from(bills).where(eq(bills.id, id)).limit(1);
+  return r[0];
+}
+
+export async function listBillsByLandlord(landlordId: number) {
+  const db = requireDb();
+  const rows = await db
+    .select({
+      id: bills.id,
+      landlordId: bills.landlordId,
+      tenantId: bills.tenantId,
+      status: bills.status,
+      totalAmount: bills.totalAmount,
+      dueDate: bills.dueDate,
+      meterPhotoUrl: bills.meterPhotoUrl,
+      notes: bills.notes,
+      createdAt: bills.createdAt,
+      paidAt: bills.paidAt,
+      tenantName: users.name,
+      tenantEmail: users.email,
+    })
+    .from(bills)
+    .leftJoin(users, eq(users.id, bills.tenantId))
+    .where(eq(bills.landlordId, landlordId))
+    .orderBy(desc(bills.createdAt));
+  return rows;
+}
+
+export async function listBillsByTenant(tenantId: number) {
+  const db = requireDb();
+  return db
+    .select()
+    .from(bills)
+    .where(and(eq(bills.tenantId, tenantId), or(eq(bills.status, "deployed"), eq(bills.status, "paid"))!))
+    .orderBy(desc(bills.createdAt));
+}
+
+export async function deleteBill(id: number) {
+  const db = requireDb();
+  await db.delete(billItems).where(eq(billItems.billId, id));
+  await db.delete(payments).where(eq(payments.billId, id));
+  await db.delete(bills).where(eq(bills.id, id));
+}
+
+export async function listBillItems(billId: number) {
+  const db = requireDb();
+  return db.select().from(billItems).where(eq(billItems.billId, billId));
+}
+
+export async function replaceBillItems(billId: number, items: InsertBillItem[]) {
+  const db = requireDb();
+  await db.delete(billItems).where(eq(billItems.billId, billId));
+  if (items.length > 0) {
+    await db.insert(billItems).values(items.map((it) => ({ ...it, billId })));
+  }
+}
+
+export async function getLatestReadingForTenantUtility(
+  tenantId: number,
+  utilityId: number,
+): Promise<number | null> {
+  const db = requireDb();
+  const result = await db
+    .select({
+      currentReading: billItems.currentReading,
+      createdAt: bills.createdAt,
+    })
+    .from(billItems)
+    .innerJoin(bills, eq(billItems.billId, bills.id))
+    .where(
+      and(
+        eq(bills.tenantId, tenantId),
+        eq(billItems.utilityId, utilityId),
+        or(eq(bills.status, "deployed"), eq(bills.status, "paid")),
+      ),
+    )
+    .orderBy(desc(bills.createdAt))
+    .limit(1);
+  if (result.length === 0) return null;
+  return Number(result[0].currentReading);
+}
+
+// ============================================================
+// PAYMENTS
+// ============================================================
+
+export async function createPayment(data: InsertPayment) {
+  const db = requireDb();
+  const res = await db.insert(payments).values(data);
+  return Number((res as any)[0]?.insertId ?? (res as any).insertId);
+}
+
+export async function getPaymentsForBill(billId: number) {
+  const db = requireDb();
+  return db
+    .select()
+    .from(payments)
+    .where(eq(payments.billId, billId))
+    .orderBy(desc(payments.uploadedAt));
+}
+
+// ============================================================
+// CONVERSATIONS & MESSAGES
+// ============================================================
+
+export async function getOrCreateConversation(
+  landlordId: number,
+  tenantId: number,
+): Promise<number> {
+  const db = requireDb();
+  const existing = await db
+    .select()
+    .from(conversations)
+    .where(and(eq(conversations.landlordId, landlordId), eq(conversations.tenantId, tenantId)))
+    .limit(1);
+  if (existing.length > 0) return existing[0].id;
+  const res = await db.insert(conversations).values({ landlordId, tenantId });
+  return Number((res as any)[0]?.insertId ?? (res as any).insertId);
+}
+
+export async function listConversationsForLandlord(landlordId: number) {
+  const db = requireDb();
+  return db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.landlordId, landlordId))
+    .orderBy(desc(conversations.lastMessageAt));
+}
+
+export async function getConversation(id: number) {
+  const db = requireDb();
+  const r = await db.select().from(conversations).where(eq(conversations.id, id)).limit(1);
+  return r[0];
+}
+
+export async function listMessages(conversationId: number) {
+  const db = requireDb();
+  return db
+    .select()
+    .from(messages)
+    .where(eq(messages.conversationId, conversationId))
+    .orderBy(messages.createdAt);
+}
+
+export async function createMessage(data: InsertMessage) {
+  const db = requireDb();
+  const res = await db.insert(messages).values(data);
+  await db
+    .update(conversations)
+    .set({ lastMessageAt: new Date() })
+    .where(eq(conversations.id, data.conversationId));
+  return Number((res as any)[0]?.insertId ?? (res as any).insertId);
+}
+
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
+
+export async function createNotification(data: InsertNotification) {
+  const db = requireDb();
+  await db.insert(notifications).values(data);
+}
+
+export async function listNotifications(userId: number) {
+  const db = requireDb();
+  return db
+    .select()
+    .from(notifications)
+    .where(eq(notifications.userId, userId))
+    .orderBy(desc(notifications.createdAt))
+    .limit(100);
+}
+
+export async function markAllNotificationsRead(userId: number) {
+  const db = requireDb();
+  await db
+    .update(notifications)
+    .set({ readAt: new Date() })
+    .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
+}
+
+export async function markNotificationRead(userId: number, id: number) {
+  const db = requireDb();
+  await db
+    .update(notifications)
+    .set({ readAt: new Date() })
+    .where(
+      and(
+        eq(notifications.id, id),
+        eq(notifications.userId, userId),
+        isNull(notifications.readAt),
+      ),
+    );
+}
+
+// ============================================================
+// AUTH LOGS / BLOCKLIST / SETTINGS
+// ============================================================
+
+export async function logAuthAttempt(data: InsertAuthLog) {
+  const db = requireDb();
+  await db.insert(authLogs).values(data);
+}
+
+export async function listRecentAuthLogs(limit = 50) {
+  const db = requireDb();
+  return db.select().from(authLogs).orderBy(desc(authLogs.attemptedAt)).limit(limit);
+}
+
+export async function listBlocklist() {
+  const db = requireDb();
+  return db.select().from(blocklist).orderBy(blocklist.domain);
+}
+
+export async function isDomainBlocked(domain: string): Promise<boolean> {
+  const db = requireDb();
+  const r = await db.select().from(blocklist).where(eq(blocklist.domain, domain.toLowerCase())).limit(1);
+  return r.length > 0;
+}
+
+export async function addBlockedDomain(domain: string) {
+  const db = requireDb();
+  await db.insert(blocklist).values({ domain: domain.toLowerCase() });
+}
+
+export async function removeBlockedDomain(domain: string) {
+  const db = requireDb();
+  await db.delete(blocklist).where(eq(blocklist.domain, domain.toLowerCase()));
+}
+
+export async function getSettings() {
+  const db = requireDb();
+  const r = await db.select().from(settings).limit(1);
+  if (r.length > 0) return r[0];
+  await db.insert(settings).values({ pendingLandlordCap: 100 });
+  const r2 = await db.select().from(settings).limit(1);
+  return r2[0];
+}
+
+export async function updateSettings(patch: { pendingLandlordCap?: number }) {
+  const db = requireDb();
+  const s = await getSettings();
+  await db.update(settings).set(patch).where(eq(settings.id, s!.id));
+}
+
+// ============================================================
+// RESET TOKENS
+// ============================================================
+
+export async function createResetToken(data: InsertResetToken) {
+  const db = requireDb();
+  await db.insert(resetTokens).values(data);
+}
+
+export async function getValidResetToken(token: string) {
+  const db = requireDb();
+  const r = await db
+    .select()
+    .from(resetTokens)
+    .where(and(eq(resetTokens.token, token), isNull(resetTokens.usedAt), gt(resetTokens.expiresAt, new Date())))
+    .limit(1);
+  return r[0];
+}
+
+export async function markResetTokenUsed(id: number) {
+  const db = requireDb();
+  await db.update(resetTokens).set({ usedAt: new Date() }).where(eq(resetTokens.id, id));
+}
+
+// ============================================================
+// STATS
+// ============================================================
+
+export async function getPlatformStats() {
+  const db = requireDb();
+  const [landlordCount, tenantCount, billCount, revenueRow, pendingRow, frozenRow] = await Promise.all([
+    db
+      .select({ c: sql<number>`count(*)` })
+      .from(users)
+      .where(and(eq(users.role, "landlord"), eq(users.status, "active"))),
+    db
+      .select({ c: sql<number>`count(*)` })
+      .from(users)
+      .where(and(eq(users.role, "tenant"), eq(users.status, "active"))),
+    db.select({ c: sql<number>`count(*)` }).from(bills),
+    db
+      .select({ total: sql<number>`coalesce(sum(${bills.totalAmount}), 0)` })
+      .from(bills)
+      .where(eq(bills.status, "paid")),
+    db
+      .select({ c: sql<number>`count(*)` })
+      .from(users)
+      .where(and(eq(users.role, "landlord"), eq(users.status, "pending"))),
+    db
+      .select({ c: sql<number>`count(*)` })
+      .from(users)
+      .where(and(eq(users.role, "landlord"), eq(users.status, "frozen"))),
+  ]);
+  return {
+    landlords: Number(landlordCount[0]?.c ?? 0),
+    tenants: Number(tenantCount[0]?.c ?? 0),
+    bills: Number(billCount[0]?.c ?? 0),
+    revenue: Number(revenueRow[0]?.total ?? 0),
+    pendingLandlords: Number(pendingRow[0]?.c ?? 0),
+    frozenLandlords: Number(frozenRow[0]?.c ?? 0),
+  };
+}
+
+export async function listTrashedLandlords() {
+  const db = requireDb();
+  return db
+    .select()
+    .from(users)
+    .where(and(eq(users.role, "landlord"), eq(users.status, "deleted")))
+    .orderBy(desc(users.deletedAt));
+}
+
+// ----- Cascade delete helpers (admin) -----
+
+export async function softDeleteLandlordCascade(landlordId: number) {
+  const db = requireDb();
+  const now = new Date();
+  await db
+    .update(users)
+    .set({ status: "deleted", deletedAt: now })
+    .where(and(eq(users.role, "tenant"), eq(users.landlordId, landlordId)));
+  await db
+    .update(users)
+    .set({ status: "deleted", deletedAt: now })
+    .where(eq(users.id, landlordId));
+}
+
+export async function permanentDeleteLandlordCascade(landlordId: number) {
+  const db = requireDb();
+
+  const tenantRows = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.role, "tenant"), eq(users.landlordId, landlordId)));
+  const tenantIds = tenantRows.map((r) => r.id);
+
+  const billRows = await db
+    .select({ id: bills.id })
+    .from(bills)
+    .where(eq(bills.landlordId, landlordId));
+  const billIds = billRows.map((r) => r.id);
+
+  if (billIds.length > 0) {
+    await db.delete(billItems).where(inArray(billItems.billId, billIds));
+    await db.delete(payments).where(inArray(payments.billId, billIds));
+    await db.delete(bills).where(inArray(bills.id, billIds));
+  }
+
+  const convRows = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(eq(conversations.landlordId, landlordId));
+  const convIds = convRows.map((r) => r.id);
+  if (convIds.length > 0) {
+    await db.delete(messages).where(inArray(messages.conversationId, convIds));
+    await db.delete(conversations).where(inArray(conversations.id, convIds));
+  }
+
+  await db.delete(utilities).where(eq(utilities.landlordId, landlordId));
+
+  const allUserIds = [landlordId, ...tenantIds];
+  if (allUserIds.length > 0) {
+    await db.delete(notifications).where(inArray(notifications.userId, allUserIds));
+    await db.delete(resetTokens).where(inArray(resetTokens.userId, allUserIds));
+  }
+
+  if (tenantIds.length > 0) {
+    await db.delete(users).where(inArray(users.id, tenantIds));
+  }
+  await db.delete(users).where(eq(users.id, landlordId));
+
+  return {
+    tenants: tenantIds.length,
+    bills: billIds.length,
+    conversations: convIds.length,
+  };
+}
+
+export async function listActiveLandlordAndTenantIds(): Promise<number[]> {
+  const db = requireDb();
+  const rows = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(
+      and(
+        or(eq(users.role, "landlord"), eq(users.role, "tenant")),
+        eq(users.status, "active"),
+      ),
+    );
+  return rows.map((r) => Number(r.id));
+}
