@@ -49,10 +49,23 @@ import {
 } from "../drizzle/schema";
 
 // ---------- defaults (override via env) ----------
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL ?? "jarren.manusai@outlook.com").toLowerCase();
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? "030921manusai!@!";
-const ADMIN_NAME = process.env.ADMIN_NAME ?? "Jarren (Admin)";
-const ADMIN_PHONE = process.env.ADMIN_PHONE ?? "+639000000000";
+// Accept both ADMIN_* and BOOTSTRAP_ADMIN_* for the same value.
+// .secrets.template.txt historically used BOOTSTRAP_ADMIN_*; the canonical
+// names going forward are ADMIN_*. Both are honored to avoid silent drift.
+const ADMIN_EMAIL = (
+  process.env.ADMIN_EMAIL ??
+  process.env.BOOTSTRAP_ADMIN_EMAIL ??
+  "jarren.manusai@outlook.com"
+).toLowerCase();
+const ADMIN_PASSWORD =
+  process.env.ADMIN_PASSWORD ??
+  process.env.BOOTSTRAP_ADMIN_PASSWORD ??
+  // Fallback default ONLY for first-deploy bootstrap. Operator MUST rotate
+  // immediately after first sign-in (see TAGGING.md / DEPLOY_PREREQUISITES.md).
+  // Public-repo redaction: this value is intentionally weak and well-known.
+  "changeme-rotate-on-first-signin";
+const ADMIN_NAME = process.env.ADMIN_NAME ?? process.env.BOOTSTRAP_ADMIN_NAME ?? "Jarren (Admin)";
+const ADMIN_PHONE = process.env.ADMIN_PHONE ?? process.env.BOOTSTRAP_ADMIN_PHONE ?? "+639000000000";
 
 function ensureSafe() {
   if (process.env.NODE_ENV === "production" && process.env.ALLOW_PROD_SEED !== "1") {

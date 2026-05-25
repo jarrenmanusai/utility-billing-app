@@ -4,23 +4,37 @@
 > only two things you can legitimately ask. Everything else is already
 > answered in `DEPLOY_CONFIG.json`.
 
-## TL;DR — full deploy in 8 steps
+## TL;DR — full deploy in 9 steps
 
 ```
+0. CRITICAL — overlay the real repo on top of the Manus webdev template:
+     git clone --depth 1 --branch main \
+         https://github.com/jarrenmanusai/utility-billing-app.git tmp_clone
+     find . -mindepth 1 -maxdepth 1 \
+         ! -name 'tmp_clone' ! -name '.manus-logs' ! -name '.npmrc' \
+         ! -name 'node_modules' -exec rm -rf {} +
+     shopt -s dotglob nullglob
+     mv tmp_clone/* tmp_clone/.* . 2>/dev/null || true
+     rmdir tmp_clone
+     git rev-parse HEAD                # must be a6561ac or newer
+     grep projectId app.config.ts      # must contain 7631dad9-d6f2-4006-b56d-8104211175c3
+   If either check fails, STOP. (Skipping this step caused a previous
+   deploy to publish the empty Manus template to *.manus.space.)
 1. Read DEPLOY_CONFIG.json (authoritative defaults)
 2. pnpm install --frozen-lockfile
 3. pnpm fix:env --pretty   →  feed JSON to webdev_request_secrets
    (this resolves OAUTH_SERVER_URL, OWNER_OPEN_ID, JWT_SECRET in one shot)
 4. webdev_restart_server   (so the overrides take effect)
-5. pnpm db:push && pnpm seed:admin && pnpm verify:deploy   (must be 12/12)
+5. pnpm db:push && pnpm seed:admin && pnpm verify:deploy   (must report 0 failures)
 6. webdev_save_checkpoint → operator clicks Publish in UI
 7. Set EXPO_PUBLIC_API_URL = the *.manus.space URL from step 6
    (via webdev_request_secrets, preventMatching:true)
 8. Ask operator for EXPO_TOKEN + keystore choice (the ONLY two questions)
    then run NON-INTERACTIVE so EAS never prompts:
-     EXPO_TOKEN=<from operator> EAS_NO_VCS=1 \
-       npx eas-cli build --platform android --profile production \
-         --non-interactive --no-wait
+      EXPO_TOKEN=<from operator> \
+        npx eas-cli build --platform android --profile production \
+          --non-interactive --no-wait
+   (eas.json sets `requireCommit: false`, so EAS_NO_VCS=1 is no longer required)
 ```
 
 ## CRITICAL: First-time-ever EAS bootstrap (one-time per project)
@@ -122,8 +136,10 @@ At every step, ask yourself:
 
 ## When something genuinely goes wrong
 
-If a step fails (e.g., `pnpm verify:deploy` reports something other
-than 12/12 even after `pnpm fix:env`), report the exact error to the
-operator and propose a fix — don't ask for permission to investigate,
-just investigate. **One question for diagnosis is fine; ten questions
-to gather config is not.**
+If a step fails (e.g., `pnpm verify:deploy` reports any failure
+after `pnpm fix:env`), report the exact error to the operator and
+propose a fix — don't ask for permission to investigate, just
+investigate. The pass count varies between 11 and 14 depending on
+env state; only the failure count is contractual and MUST be 0.
+**One question for diagnosis is fine; ten questions to gather
+config is not.**

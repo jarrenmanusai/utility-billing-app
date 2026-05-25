@@ -250,8 +250,9 @@ It looks like this:
 
     # comments allowed
     EXPO_TOKEN=expo_abc123...
-    BOOTSTRAP_ADMIN_EMAIL=jarren.manusai@outlook.com
-    BOOTSTRAP_ADMIN_PASSWORD=...
+    ADMIN_EMAIL=jarren.manusai@outlook.com           # canonical name; seed-admin.ts reads this first
+    ADMIN_PASSWORD=...                                # NEVER hardcode in chat or repo; rotate after first sign-in
+    # BOOTSTRAP_ADMIN_EMAIL / BOOTSTRAP_ADMIN_PASSWORD also accepted (legacy)
     # JWT_SECRET=optional
 
 WHEN THIS FILE EXISTS, THE AGENT MUST:
@@ -430,9 +431,15 @@ which:
 
   Defaults (override via env if needed):
       ADMIN_EMAIL    = jarren.manusai@outlook.com
-      ADMIN_PASSWORD = 030921manusai!@!
+      ADMIN_PASSWORD = <see DEPLOY_PREREQUISITES.md §3 — redacted from public repo>
+                       Operator MUST rotate this on first sign-in regardless of source.
       ADMIN_NAME     = Jarren (Admin)
       ADMIN_PHONE    = +639000000000
+
+  Equivalent legacy names (also honored): BOOTSTRAP_ADMIN_EMAIL,
+  BOOTSTRAP_ADMIN_PASSWORD, BOOTSTRAP_ADMIN_NAME, BOOTSTRAP_ADMIN_PHONE.
+  Use ADMIN_* in new prompts/docs; legacy names exist only for backward
+  compatibility with .secrets.template.txt.
 
 To run:
 
@@ -504,7 +511,8 @@ run `eas build:configure`.
          keystore → "Upload a keystore" → paste the four secrets.
 
   4) Build (NON-INTERACTIVE — required for hands-off agent runs):
-       export EAS_NO_VCS=1                # don't fail on uncommitted changes
+       # Note: EAS_NO_VCS=1 is no longer needed — eas.json sets
+       # `requireCommit: false` so EAS does not check the working tree.
        npx eas-cli build --platform android --profile production \
          --non-interactive \
          --no-wait                        # returns immediately with a build URL
@@ -520,7 +528,7 @@ run `eas build:configure`.
      "First-time-ever EAS bootstrap" — do `eas init` LOCALLY first).
 
   5) (Optional) Build an .aab for Play Store:
-       EAS_NO_VCS=1 npx eas-cli build --platform android --profile production-aab \
+       npx eas-cli build --platform android --profile production-aab \
          --non-interactive --no-wait
 
 Local build path (only if you cannot use EAS)
@@ -585,6 +593,42 @@ Follow these in order. Do NOT skip steps. Do NOT improvise.
   STEP  2. Initialise a new Manus webdev project for this codebase using
            the repo URL from §1 of DEPLOY_PREREQUISITES.md. Do NOT
            scaffold from a template.
+
+  STEP  2.5. CRITICAL — replace the Manus webdev template with the
+           actual repo. `webdev_init_project` ALWAYS scaffolds an
+           Expo template; it does not clone the operator's GitHub
+           repository. You MUST overlay the real code yourself before
+           proceeding.
+
+           Recommended sequence (run from the project root):
+
+               git clone --depth 1 --branch main \
+                   https://github.com/jarrenmanusai/utility-billing-app.git \
+                   tmp_clone
+               # Wipe the template files but preserve sandbox-only artefacts
+               # (.manus-logs, .npmrc, node_modules) so the dev server keeps working.
+               find . -mindepth 1 -maxdepth 1 \
+                   ! -name 'tmp_clone' \
+                   ! -name '.manus-logs' \
+                   ! -name '.npmrc' \
+                   ! -name 'node_modules' \
+                   -exec rm -rf {} +
+               # Move the real repo contents into place (including dotfiles).
+               shopt -s dotglob nullglob
+               mv tmp_clone/* tmp_clone/.* . 2>/dev/null || true
+               rmdir tmp_clone
+
+           Then VERIFY the overlay landed correctly. Both checks MUST
+           pass before continuing:
+
+               git rev-parse HEAD                # must be a6561ac or newer
+               grep projectId app.config.ts      # must include
+                                                 # 7631dad9-d6f2-4006-b56d-8104211175c3
+
+           If either grep returns empty, STOP. Report the failure to
+           the operator and do not proceed. (A previous deploy attempt
+           skipped this step and ended up publishing the empty Manus
+           template to *.manus.space — do not repeat that mistake.)
 
   STEP  3. Read README.md, server/README.md, todo.md, this file, and
            docs/env.reference.md.
@@ -716,7 +760,7 @@ pass. If even one fails, STOP and fix before shipping.
          version only (a newer version re-shows it).
 
   G. NATIVE BUILD  (requires a real Android device — defer to operator)
-     [ ] `EAS_NO_VCS=1 npx eas-cli build --platform android --profile production --non-interactive --no-wait`
+     [ ] `npx eas-cli build --platform android --profile production --non-interactive --no-wait`
          finishes without errors using the JDK 21 image.
      [ ] The produced .apk installs on a real Android 7+ device.
      [ ] The installed app reports the correct version under
@@ -742,7 +786,11 @@ blocker and do not advertise the deploy as ready.
 10. KNOWN GOOD STATE (so you can verify nothing has drifted)
 ================================================================================
 
-  Test count                : 73 (or higher in newer tags) — ALL passing
+  Test count                : whatever vitest reports — must equal
+                              the count in tests/SNAPSHOT.txt with
+                              zero failures. The snapshot file is
+                              committed to the repo and updated only
+                              alongside test additions/removals.
   Drizzle migrations        : 3 (latest 0002 adds users.phone)
   App version (rolling)     : whatever the topmost git tag says
   Required CAPTCHA layers   : 3 (math + honeypot + time-to-submit)

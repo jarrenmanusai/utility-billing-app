@@ -48,14 +48,17 @@
     "seedAdmin": {
       "command": "pnpm seed:admin",
       "wipeBeforeSeed": true,
-      "email": "admin@utilitybill.app",
-      "_comment": "The admin email is set via env in seed-admin.ts. Operator can override with ADMIN_EMAIL env var."
+      "email": "jarren.manusai@outlook.com",
+      "emailEnvVar": "ADMIN_EMAIL",
+      "emailEnvVarLegacy": "BOOTSTRAP_ADMIN_EMAIL",
+      "_comment": "Default admin email is hardcoded in scripts/seed-admin.ts. Override via ADMIN_EMAIL (canonical) or BOOTSTRAP_ADMIN_EMAIL (legacy alias from .secrets.template.txt). The seeder honors both for backward compatibility."
     }
   },
   "audit": {
     "preDeployCommand": "pnpm verify:deploy",
-    "expectedPasses": 12,
-    "blockOnFailure": true
+    "expectedFailures": 0,
+    "blockOnFailure": true,
+    "_comment_passes": "DO NOT assert a fixed pass count. The actual count varies between 11 and 14 depending on env state (whether EXPO_PUBLIC_API_URL is set, whether the live /api/version probe succeeds, whether non-admin users exist, etc.). Only the failure count is contractual: it MUST be 0."
   },
   "build": {
     "platform": "android",
