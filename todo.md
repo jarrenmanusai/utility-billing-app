@@ -314,3 +314,11 @@
 - [x] Add docs/env.reference.md
 - [x] Add DEPLOY_PREREQUISITES.md (operator-supplied secrets/keystore)
 - [x] Rewrite MANUS_HANDOFF.txt as rev 3 (autonomous-friendly)
+
+## Redeploy hardening (post-1.6.0)
+- [x] Fix env-var name drift: getApiBaseUrl() accepts both EXPO_PUBLIC_API_URL and EXPO_PUBLIC_API_BASE_URL (extracted to constants/api-url.ts; load-env.js bridges both ways)
+- [x] Add /api/version endpoint returning { ok, version, name, timestamp }
+- [x] Gate registerOAuthRoutes() behind OAUTH_SERVER_URL + OWNER_OPEN_ID presence so /api/oauth/* returns 404 when OAuth is disabled
+- [x] Rewrite PUBLISHING.md to point to MANUS_HANDOFF.txt as source of truth
+- [x] Extend pnpm verify:deploy with API URL validation + dual-env-mismatch detection + live /api/version probe
+- [x] Add test coverage for the dual-env-var API base URL read (5 new tests in app-version.test.ts)

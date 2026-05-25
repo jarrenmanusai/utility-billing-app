@@ -33,7 +33,15 @@ if (fs.existsSync(envPath)) {
   });
 }
 
-// Map system variables to Expo public variables
+// Map system variables to Expo public variables.
+// Notes:
+//   * The new canonical API URL var is EXPO_PUBLIC_API_URL (per
+//     MANUS_HANDOFF.txt + DEPLOY_PREREQUISITES.md). Older code reads
+//     EXPO_PUBLIC_API_BASE_URL. We bridge the two in BOTH directions so
+//     either name works regardless of which one the operator set.
+//   * OAuth-era keys are kept for backward compatibility but production
+//     deploys must leave OAUTH_SERVER_URL / OWNER_OPEN_ID UNSET (enforced
+//     by `pnpm verify:deploy`).
 const mappings = {
   VITE_APP_ID: "EXPO_PUBLIC_APP_ID",
   VITE_OAUTH_PORTAL_URL: "EXPO_PUBLIC_OAUTH_PORTAL_URL",
@@ -46,4 +54,14 @@ for (const [systemVar, expoVar] of Object.entries(mappings)) {
   if (process.env[systemVar] && !process.env[expoVar]) {
     process.env[expoVar] = process.env[systemVar];
   }
+}
+
+// Two-way bridge between EXPO_PUBLIC_API_URL and EXPO_PUBLIC_API_BASE_URL.
+// Whichever the operator sets, the other gets the same value so every
+// runtime (server, client, EAS build) reads a consistent URL.
+if (process.env.EXPO_PUBLIC_API_URL && !process.env.EXPO_PUBLIC_API_BASE_URL) {
+  process.env.EXPO_PUBLIC_API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
+}
+if (process.env.EXPO_PUBLIC_API_BASE_URL && !process.env.EXPO_PUBLIC_API_URL) {
+  process.env.EXPO_PUBLIC_API_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 }

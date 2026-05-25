@@ -148,6 +148,69 @@ async function checkVersionFiles() {
   ok(`package.json version matches (${pkgJson.version})`);
 }
 
+async function checkApiUrlEnv() {
+  const url = process.env.EXPO_PUBLIC_API_URL;
+  const legacy = process.env.EXPO_PUBLIC_API_BASE_URL;
+
+  if (!url && !legacy) {
+    // Not strictly fatal here — dev runs can derive the URL from
+    // window.location — but for a real deploy this should be set.
+    ok(
+      "EXPO_PUBLIC_API_URL not set (OK for local dev; REQUIRED for EAS production build)",
+    );
+    return;
+  }
+
+  const chosen = url ?? legacy!;
+  if (!/^https?:\/\//i.test(chosen)) {
+    return fail(
+      "EXPO_PUBLIC_API_URL is a valid URL",
+      `value=${chosen.slice(0, 64)}… — must start with http:// or https://`,
+    );
+  }
+  if (/^http:\/\//i.test(chosen)) {
+    ok(`EXPO_PUBLIC_API_URL set (⚠  http:// — production should use https://): ${chosen}`);
+  } else {
+    ok(`EXPO_PUBLIC_API_URL set: ${chosen}`);
+  }
+
+  if (url && legacy && url !== legacy) {
+    return fail(
+      "EXPO_PUBLIC_API_URL and EXPO_PUBLIC_API_BASE_URL agree",
+      `_API_URL=${url}  ≠  _API_BASE_URL=${legacy} — unset one or make them equal`,
+    );
+  }
+
+  // Best-effort live probe of /api/version. Skipped if the URL is
+  // localhost or otherwise clearly not yet deployed; failures here are a
+  // soft warning rather than a hard fail because the server may not be
+  // running at audit time.
+  if (/^https:\/\//i.test(chosen) && !/localhost|127\.0\.0\.1/.test(chosen)) {
+    try {
+      const res = await fetch(`${chosen.replace(/\/+$/, "")}/api/version`, {
+        method: "GET",
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) {
+        ok(
+          `live /api/version probe returned HTTP ${res.status} (server may not be deployed yet — OK to ignore pre-publish)`,
+        );
+      } else {
+        const body = (await res.json().catch(() => ({}))) as { version?: string };
+        if (body.version) {
+          ok(`live /api/version reports ${body.version}`);
+        } else {
+          ok("live /api/version reachable but response did not include `version`");
+        }
+      }
+    } catch (err) {
+      ok(
+        `live /api/version probe skipped: ${(err as Error).message} (OK pre-deploy)`,
+      );
+    }
+  }
+}
+
 async function main() {
   console.log("== verify-deploy ==");
   try {
@@ -155,6 +218,7 @@ async function main() {
     await checkSchema();
     await checkAdmin();
     await checkVersionFiles();
+    await checkApiUrlEnv();
   } catch (err) {
     fail("unexpected error", String(err));
   }

@@ -1,11 +1,20 @@
 import * as Linking from "expo-linking";
 import * as ReactNative from "react-native";
 
+import { resolveApiBaseUrl } from "@/constants/api-url";
+
 // Extract scheme from bundle ID (last segment timestamp, prefixed with "manus")
 // e.g., "space.manus.my.app.t20240115103045" -> "manus20240115103045"
 const bundleId = "com.app.utilitybillingapp";
 const timestamp = bundleId.split(".").pop()?.replace(/^t/, "") ?? "";
 const schemeFromBundleId = `manus${timestamp}`;
+
+// API base URL: accept BOTH `EXPO_PUBLIC_API_URL` (the name documented in
+// MANUS_HANDOFF.txt + DEPLOY_PREREQUISITES.md + docs/env.reference.md) AND
+// the legacy `EXPO_PUBLIC_API_BASE_URL` (what older code used). Resolved by
+// the dependency-free helper in constants/api-url.ts so the logic stays
+// unit-testable without dragging in expo-linking / react-native.
+const resolvedApiBaseUrl = resolveApiBaseUrl();
 
 const env = {
   portal: process.env.EXPO_PUBLIC_OAUTH_PORTAL_URL ?? "",
@@ -13,7 +22,7 @@ const env = {
   appId: process.env.EXPO_PUBLIC_APP_ID ?? "",
   ownerId: process.env.EXPO_PUBLIC_OWNER_OPEN_ID ?? "",
   ownerName: process.env.EXPO_PUBLIC_OWNER_NAME ?? "",
-  apiBaseUrl: process.env.EXPO_PUBLIC_API_BASE_URL ?? "",
+  apiBaseUrl: resolvedApiBaseUrl,
   deepLinkScheme: schemeFromBundleId,
 };
 

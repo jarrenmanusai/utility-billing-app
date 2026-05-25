@@ -9,6 +9,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { storagePut } from "../storage";
 import { verifyAppToken } from "../auth";
+import { APP_VERSION } from "@/constants/app-version";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -58,10 +59,35 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
   registerStorageProxy(app);
-  registerOAuthRoutes(app);
+
+  // Only mount the Manus-OAuth callback routes when OAuth is intentionally
+  // enabled via env. The locked production deploy policy (MANUS_HANDOFF.txt
+  // §1) leaves both OAUTH_SERVER_URL and OWNER_OPEN_ID UNSET, so the
+  // /api/oauth/* routes simply do not exist in that case and any probe
+  // returns 404 — which is what audit checklist H expects.
+  if (process.env.OAUTH_SERVER_URL && process.env.OWNER_OPEN_ID) {
+    registerOAuthRoutes(app);
+    console.log("[OAuth] Manus OAuth routes mounted (env vars set).");
+  } else {
+    console.log(
+      "[OAuth] Manus OAuth disabled — /api/oauth/* not mounted (email+password only).",
+    );
+  }
 
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true, timestamp: Date.now() });
+  });
+
+  // Lightweight version probe used by the deploy auditor and ops scripts.
+  // Lets the agent verify the deployed server matches the expected build
+  // without hitting any tRPC route or requiring authentication.
+  app.get("/api/version", (_req, res) => {
+    res.json({
+      ok: true,
+      version: APP_VERSION,
+      name: "utility-billing-app",
+      timestamp: Date.now(),
+    });
   });
 
   // Simple image upload endpoint - accepts multipart/form-data with `file` and optional `folder`.
