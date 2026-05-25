@@ -267,3 +267,11 @@
 - [x] Added a small expand glyph overlay on chat thumbnails so the action is discoverable
 - [x] Mapped `arrow.up.left.and.arrow.down.right` → MaterialIcons `open-in-full`
 - [x] Bump version to 1.4.1
+
+## User Feedback — Round 25 (Bill receipt image expand)
+- [x] Extracted shared `ImageLightbox` + `useImagePreview` + `ExpandHint` to `components/image-lightbox.tsx`
+- [x] Refactored `chat-view.tsx` to use the shared component (no behavior change)
+- [x] Bill receipt: tapping the meter photo opens full-screen lightbox (entire image visible, aspect-ratio preserved)
+- [x] Bill receipt: payment proof images also expandable with the same UX
+- [x] Added "Tap to view full image" hint under meter photo + expand glyph overlay on each thumbnail
+- [x] Bump version to 1.4.2

@@ -1,18 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   Alert,
-  Dimensions,
   FlatList,
   Image,
-  Modal,
   Platform,
   Pressable,
-  StatusBar as RNStatusBar,
   Text,
   TextInput,
   View,
   KeyboardAvoidingView,
 } from "react-native";
+
+import { ExpandHint, ImageLightbox, useImagePreview } from "@/components/image-lightbox";
 
 import { Button, ScreenHeader } from "@/components/ui/primitives";
 import { ScreenContainer } from "@/components/screen-container";
@@ -115,28 +114,9 @@ export function ChatView({ title, onBack, messages, onSend, isLoading }: ChatVie
 
   const resolveUrl = (url: string) => (url.startsWith("/") ? `${getApiBaseUrl()}${url}` : url);
 
-  // ----- Lightbox (image preview) state -----
-  // When the user taps any chat image we open a full-screen modal that shows
-  // the entire picture using `resizeMode="contain"` so nothing is cropped.
-  // Tapping anywhere on the dim background, the close button, or pressing the
-  // hardware back button on Android closes the preview.
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewSize, setPreviewSize] = useState<{ w: number; h: number } | null>(null);
-
-  useEffect(() => {
-    if (!previewUrl) {
-      setPreviewSize(null);
-      return;
-    }
-    // Image.getSize lets us pick a fit-to-screen size that preserves aspect
-    // ratio while still bounding the image to the viewport. Without this the
-    // RN <Image> default of 0x0 would render nothing inside the modal.
-    Image.getSize(
-      previewUrl,
-      (w, h) => setPreviewSize({ w, h }),
-      () => setPreviewSize({ w: 1, h: 1 }),
-    );
-  }, [previewUrl]);
+  // Shared full-screen image preview for any chat photo. Same component is
+  // used in BillReceipt so the expand UX is identical everywhere.
+  const preview = useImagePreview();
 
   return (
     <ScreenContainer edges={["top", "bottom", "left", "right"]}>
@@ -162,7 +142,7 @@ export function ChatView({ title, onBack, messages, onSend, isLoading }: ChatVie
                 >
                   {item.attachmentUrl ? (
                     <Pressable
-                      onPress={() => setPreviewUrl(resolveUrl(item.attachmentUrl!))}
+                      onPress={() => preview.open(resolveUrl(item.attachmentUrl!))}
                       accessibilityRole="imagebutton"
                       accessibilityLabel="View photo full screen"
                       style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1, marginBottom: 6 }]}
@@ -172,22 +152,7 @@ export function ChatView({ title, onBack, messages, onSend, isLoading }: ChatVie
                         style={{ width: 200, height: 200, borderRadius: 12 }}
                         resizeMode="cover"
                       />
-                      <View
-                        pointerEvents="none"
-                        style={{
-                          position: "absolute",
-                          right: 6,
-                          bottom: 6,
-                          width: 26,
-                          height: 26,
-                          borderRadius: 13,
-                          backgroundColor: "rgba(0,0,0,0.45)",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
-                      >
-                        <IconSymbol name="arrow.up.left.and.arrow.down.right" size={14} color="#ffffff" />
-                      </View>
+                      <ExpandHint />
                     </Pressable>
                   ) : null}
                   {item.body ? (
@@ -270,103 +235,7 @@ export function ChatView({ title, onBack, messages, onSend, isLoading }: ChatVie
         onClose={() => setEmojiOpen(false)}
         onSelect={handleEmojiSelect}
       />
-      <ImageLightbox
-        url={previewUrl}
-        size={previewSize}
-        onClose={() => setPreviewUrl(null)}
-      />
+      <ImageLightbox {...preview.props} />
     </ScreenContainer>
-  );
-}
-
-/**
- * Full-screen image preview with aspect-ratio-preserving fit. Used by the
- * chat view to expand sent/received photos. Behaviour:
- *   - Tap anywhere on the dim background to dismiss.
- *   - A floating close button is also rendered for discoverability.
- *   - Native uses a transparent Modal (so the status bar dims with the
- *     backdrop); web uses the same Modal which expo-router maps to a
- *     fixed-position overlay.
- */
-function ImageLightbox({
-  url,
-  size,
-  onClose,
-}: {
-  url: string | null;
-  size: { w: number; h: number } | null;
-  onClose: () => void;
-}) {
-  const win = Dimensions.get("window");
-  const maxW = win.width;
-  // Reserve a little vertical room so the close button isn't flush against the
-  // status bar / home indicator on phones.
-  const maxH = win.height - 80;
-
-  let displayW = maxW;
-  let displayH = maxH;
-  if (size && size.w > 0 && size.h > 0) {
-    const ratio = size.w / size.h;
-    // Fit within both bounds while keeping aspect ratio ("contain").
-    if (maxW / maxH > ratio) {
-      // Window is wider than image → height limited.
-      displayH = maxH;
-      displayW = maxH * ratio;
-    } else {
-      displayW = maxW;
-      displayH = maxW / ratio;
-    }
-  }
-
-  return (
-    <Modal
-      visible={!!url}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-      statusBarTranslucent
-    >
-      {Platform.OS === "android" ? (
-        <RNStatusBar backgroundColor="rgba(0,0,0,0.95)" barStyle="light-content" />
-      ) : null}
-      <Pressable
-        onPress={onClose}
-        style={{
-          flex: 1,
-          backgroundColor: "rgba(0,0,0,0.95)",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        {url ? (
-          <Image
-            source={{ uri: url }}
-            style={{ width: displayW, height: displayH }}
-            resizeMode="contain"
-          />
-        ) : null}
-        <Pressable
-          onPress={onClose}
-          hitSlop={12}
-          accessibilityLabel="Close preview"
-          style={({ pressed }) => [
-            {
-              position: "absolute",
-              top: Platform.OS === "ios" ? 56 : 24,
-              right: 16,
-              width: 40,
-              height: 40,
-              borderRadius: 20,
-              backgroundColor: "rgba(255,255,255,0.18)",
-              alignItems: "center",
-              justifyContent: "center",
-              opacity: pressed ? 0.7 : 1,
-            },
-          ]}
-        >
-          <IconSymbol name="xmark" size={18} color="#ffffff" />
-        </Pressable>
-      </Pressable>
-    </Modal>
   );
 }
