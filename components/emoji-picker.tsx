@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  FlatList,
   Modal,
   Pressable,
   ScrollView,
@@ -412,15 +411,15 @@ export function EmojiPicker({ visible, onClose, onSelect }: EmojiPickerProps) {
             ) : null}
           </View>
 
-          {/* Emoji grid */}
-          <FlatList
-            data={activeEmojis}
-            keyExtractor={(item, idx) => `${item.char}-${idx}`}
-            numColumns={8}
-            // Re-key on column change to avoid FlatList numColumns crash.
-            key="emoji-grid-8"
-            contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 8 }}
-            ListEmptyComponent={
+          {/* Emoji grid — 8 columns via flexWrap so cells size predictably on
+              web + native regardless of FlatList layout quirks. Each cell
+              claims an exact 12.5% slice, giving us a true 8×N grid. */}
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: 8 }}
+            showsVerticalScrollIndicator={false}
+          >
+            {activeEmojis.length === 0 ? (
               <View style={{ paddingVertical: 32, alignItems: "center" }}>
                 <Text style={{ color: colors.muted, fontSize: 14 }}>
                   {searchResults
@@ -430,26 +429,38 @@ export function EmojiPicker({ visible, onClose, onSelect }: EmojiPickerProps) {
                       : "Nothing here yet."}
                 </Text>
               </View>
-            }
-            renderItem={({ item }) => (
-              <Pressable
-                onPress={() => handlePick(item.char)}
-                style={({ pressed }) => [
-                  {
-                    flex: 1,
-                    aspectRatio: 1,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    borderRadius: 8,
-                    margin: 2,
-                    backgroundColor: pressed ? colors.surface : "transparent",
-                  },
-                ]}
+            ) : (
+              <View
+                style={{
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  alignItems: "flex-start",
+                }}
               >
-                <Text style={{ fontSize: 26 }}>{item.char}</Text>
-              </Pressable>
+                {activeEmojis.map((item, idx) => (
+                  <Pressable
+                    key={`${item.char}-${idx}`}
+                    onPress={() => handlePick(item.char)}
+                    style={({ pressed }) => [
+                      {
+                        // 12.5% × 8 = 100% → a perfect 8-column grid that
+                        // adapts to any sheet width (mobile portrait or
+                        // wider previews like the desktop browser).
+                        width: "12.5%",
+                        aspectRatio: 1,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        borderRadius: 8,
+                        backgroundColor: pressed ? colors.surface : "transparent",
+                      },
+                    ]}
+                  >
+                    <Text style={{ fontSize: 26, lineHeight: 32 }}>{item.char}</Text>
+                  </Pressable>
+                ))}
+              </View>
             )}
-          />
+          </ScrollView>
 
           {/* Category tab bar (hidden during search) */}
           {!searchResults ? (

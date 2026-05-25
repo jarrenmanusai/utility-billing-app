@@ -12,7 +12,7 @@
  *    is always re-evaluated on each render.
  *  - Keeping a hand-bumped string makes the changelog explicit per release.
  */
-export const APP_VERSION = "1.3.1";
+export const APP_VERSION = "1.3.2";
 export const APP_NAME = "UtilityFlow";
 export const APP_TAGLINE = "Smart Utility Billing for Landlords";
 export const APP_AUTHOR = "John Warren Perez";
