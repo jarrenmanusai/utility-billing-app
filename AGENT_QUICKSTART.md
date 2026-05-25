@@ -38,13 +38,15 @@ extra: {
 
 If that field is missing, the audit fails with a paste-ready fix:
 
-1. **Recommended:** the operator runs ONCE on their LOCAL machine:
+1. **Recommended:** the operator runs ONCE on their LOCAL machine the
+   provided bootstrap script:
    ```
    export EXPO_TOKEN=<token>
-   npx eas-cli init                  # interactive — creates project on expo.dev,
-                                    # injects extra.eas.projectId into app.config
-   git add app.config.ts && git commit -m "chore: add eas projectId" && git push
+   bash scripts/bootstrap-eas-projectid.sh
    ```
+   The script wraps `eas init` with safety checks, auto-commits the
+   new `projectId` into `app.config.ts`, and pushes to origin. See
+   `EAS_BOOTSTRAP_README.txt` for the full operator-facing guide.
    After that, every future agent build is fully `--non-interactive`.
 
 2. **Skip step:** the agent runs `pnpm verify:deploy`, sees the
