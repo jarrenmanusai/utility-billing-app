@@ -182,3 +182,13 @@
 - [x] All `suggestDates` outputs guaranteed to be today-or-later
 - [x] Vitest expanded to 26 date-parse tests (44 total)
 - [x] Bump version to 1.2.1
+
+## User Feedback — Round 16 (Tappable Home overview cards)
+- [x] Tenants stat card → switches to Tenants tab
+- [x] Unpaid stat card → Bills tab pre-filtered to "Unpaid" (deployed status)
+- [x] This-month revenue card → Bills tab pre-filtered to "Paid"
+- [x] Bills tab gains filter chips: All / Unpaid / Paid / Draft (synced with Home navigation)
+- [x] Bottom-bar tap on "Bills" resets the filter to "All"
+- [x] Stat cards show chevron + press feedback (scale 0.98, opacity 0.7) so they read as interactive
+- [x] Empty-state copy adapts to active filter (e.g. "No unpaid bills")
+- [x] Bump version to 1.2.2

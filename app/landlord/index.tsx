@@ -1,5 +1,14 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Image, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { router } from "expo-router";
 
 import { ScreenContainer } from "@/components/screen-container";
@@ -12,9 +21,13 @@ import { useAuth } from "@/lib/auth-context";
 import { formatPHP, formatDate, formatBillPeriod, relativeTime } from "@/lib/format";
 
 type TabKey = "home" | "bills" | "tenants" | "chat" | "profile";
+type BillFilter = "all" | "unpaid" | "paid" | "draft";
 
 export default function LandlordDashboard() {
   const [tab, setTab] = useState<TabKey>("home");
+  // When the user lands on Bills via a Home stat card we want to pre-filter.
+  // The default filter when Bills is opened directly is "all".
+  const [billFilter, setBillFilter] = useState<BillFilter>("all");
   const { user } = useAuth();
   const colors = useColors();
 
@@ -28,6 +41,16 @@ export default function LandlordDashboard() {
     { key: "chat", label: "Chat", icon: "bubble.left.and.bubble.right.fill" },
     { key: "profile", label: "Profile", icon: "person.fill" },
   ];
+
+  /**
+   * Quick-action handler used by the Home overview stat cards.
+   * Tapping a card switches to the relevant tab — and, where applicable,
+   * preselects the right filter (e.g. "Unpaid" → Bills tab filtered to deployed).
+   */
+  const goTo = (target: TabKey, opts?: { billFilter?: BillFilter }) => {
+    if (opts?.billFilter) setBillFilter(opts.billFilter);
+    setTab(target);
+  };
 
   return (
     <ScreenContainer edges={["top", "left", "right"]}>
@@ -60,63 +83,113 @@ export default function LandlordDashboard() {
       </View>
 
       <View style={{ flex: 1 }}>
-        {tab === "home" ? <HomeTab /> : null}
-        {tab === "bills" ? <BillsTab /> : null}
+        {tab === "home" ? <HomeTab goTo={goTo} /> : null}
+        {tab === "bills" ? (
+          <BillsTab filter={billFilter} onFilterChange={setBillFilter} />
+        ) : null}
         {tab === "tenants" ? <TenantsTab /> : null}
         {tab === "chat" ? <ChatTab /> : null}
         {tab === "profile" ? <ProfileTab /> : null}
       </View>
 
-      <DashboardTabs tabs={tabs} active={tab} onChange={(k) => setTab(k as TabKey)} />
+      <DashboardTabs
+        tabs={tabs}
+        active={tab}
+        onChange={(k) => {
+          // Navigating directly via the bottom bar resets the bill filter
+          // so users always see the full list when they tap "Bills".
+          if (k === "bills" && tab !== "bills") setBillFilter("all");
+          setTab(k as TabKey);
+        }}
+      />
     </ScreenContainer>
   );
 }
 
 // ---------- Tabs ----------
 
-function HomeTab() {
+interface HomeTabProps {
+  goTo: (target: TabKey, opts?: { billFilter?: BillFilter }) => void;
+}
+
+function HomeTab({ goTo }: HomeTabProps) {
   const stats = trpc.landlord.stats.useQuery();
-  const colors = useColors();
   return (
     <ScrollView
       contentContainerStyle={{ padding: 16, gap: 12 }}
-      refreshControl={<RefreshControl refreshing={stats.isFetching} onRefresh={() => stats.refetch()} />}
+      refreshControl={
+        <RefreshControl refreshing={stats.isFetching} onRefresh={() => stats.refetch()} />
+      }
     >
       <Text className="text-xl font-bold text-foreground">Overview</Text>
 
       <View className="flex-row gap-3">
-        <StatCard icon="person.2.fill" label="Tenants" value={String(stats.data?.tenants ?? "—")} />
-        <StatCard icon="doc.text.fill" label="Unpaid" value={String(stats.data?.unpaidBills ?? "—")} />
+        <StatCard
+          icon="person.2.fill"
+          label="Tenants"
+          value={String(stats.data?.tenants ?? "—")}
+          onPress={() => goTo("tenants")}
+        />
+        <StatCard
+          icon="doc.text.fill"
+          label="Unpaid"
+          value={String(stats.data?.unpaidBills ?? "—")}
+          onPress={() => goTo("bills", { billFilter: "unpaid" })}
+        />
       </View>
       <View className="flex-row gap-3">
         <StatCard
           icon="banknote"
           label="This month"
           value={stats.data ? formatPHP(stats.data.monthRevenue) : "—"}
+          onPress={() => goTo("bills", { billFilter: "paid" })}
         />
         <StatCard icon="sparkles" label="" value="" hidden />
       </View>
 
       <Text className="text-base font-semibold text-foreground mt-2">Quick actions</Text>
       <View className="gap-2">
-        <Button title="Create a new bill" icon="plus" onPress={() => router.push("/landlord/bills/new")} />
-        <Button title="Add a tenant" icon="person.fill" variant="secondary" onPress={() => router.push("/landlord/tenants/new")} />
-        <Button title="Manage utility types" icon="bolt.fill" variant="secondary" onPress={() => router.push("/landlord/utilities")} />
+        <Button
+          title="Create a new bill"
+          icon="plus"
+          onPress={() => router.push("/landlord/bills/new")}
+        />
+        <Button
+          title="Add a tenant"
+          icon="person.fill"
+          variant="secondary"
+          onPress={() => router.push("/landlord/tenants/new")}
+        />
+        <Button
+          title="Manage utility types"
+          icon="bolt.fill"
+          variant="secondary"
+          onPress={() => router.push("/landlord/utilities")}
+        />
       </View>
 
       <Text className="text-base font-semibold text-foreground mt-2">Recent bills</Text>
       {stats.data?.recentBills?.length ? (
         stats.data.recentBills.map((b: any) => (
-          <Card key={b.id} onPress={() => router.push({ pathname: "/landlord/bills/[id]", params: { id: String(b.id) } })}>
+          <Card
+            key={b.id}
+            onPress={() =>
+              router.push({ pathname: "/landlord/bills/[id]", params: { id: String(b.id) } })
+            }
+          >
             <View className="flex-row items-center justify-between">
               <View className="flex-1">
                 <Text className="text-base font-semibold text-foreground" numberOfLines={1}>
                   {b.tenantName || b.tenantEmail || `Tenant #${b.tenantId}`}
                 </Text>
-                <Text className="text-xs text-muted">{formatBillPeriod(b.createdAt)} · #{b.id}</Text>
+                <Text className="text-xs text-muted">
+                  {formatBillPeriod(b.createdAt)} · #{b.id}
+                </Text>
               </View>
               <View className="items-end gap-1">
-                <Text className="text-base font-semibold text-foreground">{formatPHP(b.totalAmount)}</Text>
+                <Text className="text-base font-semibold text-foreground">
+                  {formatPHP(b.totalAmount)}
+                </Text>
                 <StatusBadge status={b.status} />
               </View>
             </View>
@@ -124,7 +197,9 @@ function HomeTab() {
         ))
       ) : (
         <Card>
-          <Text className="text-sm text-muted">No bills yet. Tap "Create a new bill" above to get started.</Text>
+          <Text className="text-sm text-muted">
+            No bills yet. Tap "Create a new bill" above to get started.
+          </Text>
         </Card>
       )}
     </ScrollView>
@@ -136,63 +211,165 @@ function StatCard({
   label,
   value,
   hidden,
+  onPress,
 }: {
   icon: React.ComponentProps<typeof IconSymbol>["name"];
   label: string;
   value: string;
   hidden?: boolean;
+  onPress?: () => void;
 }) {
   const colors = useColors();
   if (hidden) return <View style={{ flex: 1 }} />;
+  // Tappable when onPress is provided. Visually we add a subtle chevron so the
+  // user knows the card is interactive rather than just a static figure.
+  const interactive = !!onPress;
   return (
-    <View className="flex-1 bg-surface rounded-2xl border border-border p-4">
-      <View className="flex-row items-center gap-2">
-        <IconSymbol name={icon} size={18} color={colors.tint} />
-        <Text className="text-xs text-muted">{label}</Text>
+    <Pressable
+      onPress={onPress}
+      disabled={!interactive}
+      style={({ pressed }) => [
+        { flex: 1 },
+        pressed && interactive && { opacity: 0.7, transform: [{ scale: 0.98 }] },
+      ]}
+    >
+      <View className="bg-surface rounded-2xl border border-border p-4">
+        <View className="flex-row items-center justify-between">
+          <View className="flex-row items-center gap-2 flex-1">
+            <IconSymbol name={icon} size={18} color={colors.tint} />
+            <Text className="text-xs text-muted">{label}</Text>
+          </View>
+          {interactive ? (
+            <IconSymbol name="chevron.right" size={14} color={colors.muted} />
+          ) : null}
+        </View>
+        <Text className="text-xl font-bold text-foreground mt-2">{value}</Text>
       </View>
-      <Text className="text-xl font-bold text-foreground mt-2">{value}</Text>
-    </View>
+    </Pressable>
   );
 }
 
-function BillsTab() {
+interface BillsTabProps {
+  filter: BillFilter;
+  onFilterChange: (f: BillFilter) => void;
+}
+
+function BillsTab({ filter, onFilterChange }: BillsTabProps) {
   const bills = trpc.landlord.bills.list.useQuery();
+  const colors = useColors();
+
+  // Apply the current filter to the bill list. Statuses on the server are:
+  //   "draft" | "deployed" | "paid"
+  // "Unpaid" is the user-facing alias for "deployed".
+  const filtered = useMemo(() => {
+    const list = bills.data ?? [];
+    if (filter === "all") return list;
+    if (filter === "unpaid") return list.filter((b) => b.status === "deployed");
+    if (filter === "paid") return list.filter((b) => b.status === "paid");
+    if (filter === "draft") return list.filter((b) => b.status === "draft");
+    return list;
+  }, [bills.data, filter]);
+
+  const FilterChip = ({ k, label }: { k: BillFilter; label: string }) => {
+    const active = filter === k;
+    return (
+      <Pressable
+        onPress={() => onFilterChange(k)}
+        style={({ pressed }) => [
+          {
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: active ? colors.tint : colors.border,
+            backgroundColor: active ? colors.tint : "transparent",
+            opacity: pressed ? 0.7 : 1,
+          },
+        ]}
+      >
+        <Text
+          style={{
+            fontSize: 12,
+            fontWeight: "600",
+            color: active ? colors.background : colors.text,
+          }}
+        >
+          {label}
+        </Text>
+      </Pressable>
+    );
+  };
+
   return (
     <View style={{ flex: 1 }}>
       <View className="flex-row items-center justify-between px-4 py-3">
         <Text className="text-xl font-bold text-foreground">Bills</Text>
         <Button title="New" icon="plus" onPress={() => router.push("/landlord/bills/new")} />
       </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingBottom: 8 }}
+      >
+        <FilterChip k="all" label="All" />
+        <FilterChip k="unpaid" label="Unpaid" />
+        <FilterChip k="paid" label="Paid" />
+        <FilterChip k="draft" label="Draft" />
+      </ScrollView>
       <FlatList
-        data={bills.data ?? []}
+        data={filtered}
         keyExtractor={(b) => String(b.id)}
-        contentContainerStyle={{ padding: 16, paddingTop: 0, gap: 8 }}
-        refreshControl={<RefreshControl refreshing={bills.isFetching} onRefresh={() => bills.refetch()} />}
+        contentContainerStyle={{ padding: 16, paddingTop: 4, gap: 8 }}
+        refreshControl={
+          <RefreshControl refreshing={bills.isFetching} onRefresh={() => bills.refetch()} />
+        }
         ListEmptyComponent={
           bills.isLoading ? (
             <ActivityIndicator className="mt-10" />
           ) : (
             <EmptyState
               icon="doc.text.fill"
-              title="No bills yet"
-              body="Tap New to create your first bill."
+              title={
+                filter === "unpaid"
+                  ? "No unpaid bills"
+                  : filter === "paid"
+                    ? "No paid bills yet"
+                    : filter === "draft"
+                      ? "No drafts"
+                      : "No bills yet"
+              }
+              body={
+                filter === "all"
+                  ? "Tap New to create your first bill."
+                  : "Switch filters above to see other bills."
+              }
             />
           )
         }
         renderItem={({ item }) => (
-          <Card onPress={() => router.push({ pathname: "/landlord/bills/[id]", params: { id: String(item.id) } })}>
+          <Card
+            onPress={() =>
+              router.push({ pathname: "/landlord/bills/[id]", params: { id: String(item.id) } })
+            }
+          >
             <View className="flex-row items-center justify-between">
               <View className="flex-1">
                 <Text className="text-base font-semibold text-foreground" numberOfLines={1}>
-                  {(item as any).tenantName || (item as any).tenantEmail || `Tenant #${item.tenantId}`}
+                  {(item as any).tenantName ||
+                    (item as any).tenantEmail ||
+                    `Tenant #${item.tenantId}`}
                 </Text>
-                <Text className="text-xs text-muted">{formatBillPeriod(item.createdAt)} · #{item.id}</Text>
+                <Text className="text-xs text-muted">
+                  {formatBillPeriod(item.createdAt)} · #{item.id}
+                </Text>
                 {item.dueDate ? (
                   <Text className="text-xs text-muted">Due {formatDate(item.dueDate)}</Text>
                 ) : null}
               </View>
               <View className="items-end gap-1">
-                <Text className="text-base font-semibold text-foreground">{formatPHP(item.totalAmount)}</Text>
+                <Text className="text-base font-semibold text-foreground">
+                  {formatPHP(item.totalAmount)}
+                </Text>
                 <StatusBadge status={item.status} />
               </View>
             </View>
@@ -215,7 +392,9 @@ function TenantsTab() {
         data={tenants.data ?? []}
         keyExtractor={(t) => String(t.id)}
         contentContainerStyle={{ padding: 16, paddingTop: 0, gap: 8 }}
-        refreshControl={<RefreshControl refreshing={tenants.isFetching} onRefresh={() => tenants.refetch()} />}
+        refreshControl={
+          <RefreshControl refreshing={tenants.isFetching} onRefresh={() => tenants.refetch()} />
+        }
         ListEmptyComponent={
           tenants.isLoading ? (
             <ActivityIndicator className="mt-10" />
@@ -228,7 +407,11 @@ function TenantsTab() {
           )
         }
         renderItem={({ item }) => (
-          <Card onPress={() => router.push({ pathname: "/landlord/tenants/[id]", params: { id: String(item.id) } })}>
+          <Card
+            onPress={() =>
+              router.push({ pathname: "/landlord/tenants/[id]", params: { id: String(item.id) } })
+            }
+          >
             <View className="flex-row items-center gap-3">
               <View className="w-10 h-10 rounded-full bg-primary/10 items-center justify-center">
                 <Text className="text-base font-bold text-primary">
@@ -246,7 +429,10 @@ function TenantsTab() {
                   icon="doc.text.fill"
                   variant="secondary"
                   onPress={() =>
-                    router.push({ pathname: "/landlord/bills/new", params: { tenantId: String(item.id) } })
+                    router.push({
+                      pathname: "/landlord/bills/new",
+                      params: { tenantId: String(item.id) },
+                    })
                   }
                 />
               </View>
@@ -269,7 +455,9 @@ function ChatTab() {
         data={convs.data ?? []}
         keyExtractor={(c) => String(c.id)}
         contentContainerStyle={{ padding: 16, paddingTop: 0, gap: 8 }}
-        refreshControl={<RefreshControl refreshing={convs.isFetching} onRefresh={() => convs.refetch()} />}
+        refreshControl={
+          <RefreshControl refreshing={convs.isFetching} onRefresh={() => convs.refetch()} />
+        }
         ListEmptyComponent={
           convs.isLoading ? (
             <ActivityIndicator className="mt-10" />
@@ -284,7 +472,10 @@ function ChatTab() {
         renderItem={({ item }) => (
           <Card
             onPress={() =>
-              router.push({ pathname: "/landlord/chat/[id]", params: { id: String(item.id), name: item.tenant?.name ?? "Tenant" } })
+              router.push({
+                pathname: "/landlord/chat/[id]",
+                params: { id: String(item.id), name: item.tenant?.name ?? "Tenant" },
+              })
             }
           >
             <View className="flex-row items-center gap-3">
