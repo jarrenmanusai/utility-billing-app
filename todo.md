@@ -236,3 +236,12 @@
 - [x] Optimistic update so the blue dot disappears instantly
 - [x] Helper hint: "Tap any alert to open it, or use the checkmark to clear."
 - [x] Bump version to 1.3.5
+
+## User Feedback — Round 22 (Deleted-bill stuck loading + tenant receipt download)
+- [x] Tenant bill detail no longer hangs on "Loading…" when the bill was deleted — distinguishes `q.isError` with NOT_FOUND code and shows a clear "Bill no longer available" empty state with a "Back to alerts" button
+- [x] Disabled retries on NOT_FOUND so the spinner doesn't sit through 3 needless re-fetches
+- [x] Same not-found handling mirrored on landlord bill detail
+- [x] Added `lib/receipt-export.ts` that builds inline-styled HTML and uses **expo-print** + **expo-sharing** for native PDF + share-sheet, and `Print.printAsync({ html })` on web (→ "Save as PDF" / printer dialog)
+- [x] Tenant bill detail gains "Download / share receipt" button
+- [x] Landlord bill detail also gains the same button (symmetric capability)
+- [x] Bump version to 1.3.6
