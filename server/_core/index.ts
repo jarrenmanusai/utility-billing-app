@@ -75,15 +75,34 @@ async function startServer() {
       if (!payload) return res.status(401).json({ error: "Unauthorized" });
 
       const contentType = req.headers["content-type"] || "";
-      const boundaryMatch = /boundary=([^;]+)/.exec(contentType);
+      const boundaryMatch = /boundary=(?:"([^"]+)"|([^;\s]+))/i.exec(contentType);
       if (!boundaryMatch) return res.status(400).json({ error: "Missing boundary" });
-      const boundary = boundaryMatch[1].trim();
+      const boundary = (boundaryMatch[1] || boundaryMatch[2] || "").trim();
 
-      const raw: Buffer = req.body as Buffer;
+      const raw: Buffer | undefined = req.body as Buffer | undefined;
+      if (!raw || !Buffer.isBuffer(raw) || raw.length === 0) {
+        console.error("[upload] empty body", {
+          contentType,
+          bodyType: typeof raw,
+          isBuf: Buffer.isBuffer(raw),
+          len: raw && (raw as any).length,
+        });
+        return res.status(400).json({ error: "Missing file (empty body)" });
+      }
       const parts = parseMultipart(raw, boundary);
       const filePart = parts.find((p) => p.name === "file");
       const folderPart = parts.find((p) => p.name === "folder");
-      if (!filePart || !filePart.data) return res.status(400).json({ error: "Missing file" });
+      if (!filePart || !filePart.data) {
+        console.error("[upload] missing file part", {
+          boundary,
+          rawLen: raw.length,
+          partCount: parts.length,
+          partNames: parts.map((p) => p.name),
+          hasFilePart: !!filePart,
+          hasData: !!filePart?.data,
+        });
+        return res.status(400).json({ error: "Missing file" });
+      }
       const folder = (folderPart?.value || "uploads").replace(/[^a-zA-Z0-9_/-]/g, "");
       const filename = (filePart.filename || `upload-${Date.now()}.bin`).replace(/[^a-zA-Z0-9._-]/g, "_");
       const key = `${folder}/${payload.userId}/${Date.now()}-${filename}`;
@@ -126,37 +145,76 @@ type MultipartPart = {
   data?: Buffer;
 };
 
+/**
+ * Minimal but correct multipart/form-data parser.
+ *
+ * Body shape (RFC 7578):
+ *   --boundary\r\n
+ *   Content-Disposition: form-data; name="file"; filename="x.jpg"\r\n
+ *   Content-Type: image/jpeg\r\n
+ *   \r\n
+ *   <bytes>\r\n
+ *   --boundary\r\n
+ *   ... more parts ...
+ *   --boundary--\r\n
+ *
+ * The previous implementation occasionally failed when the body started
+ * with `--boundary\r\n` directly (no leading whitespace) because of an
+ * unconditional `start += 2` that assumed a CRLF was always present *after*
+ * the dash-boundary token even when it had been consumed already. This
+ * version walks the buffer using `indexOf(dashBoundary)` for every part so
+ * the byte arithmetic stays simple and robust.
+ */
 function parseMultipart(buf: Buffer, boundary: string): MultipartPart[] {
   const parts: MultipartPart[] = [];
+  if (!boundary) return parts;
   const dashBoundary = Buffer.from(`--${boundary}`);
-  const crlf = Buffer.from("\r\n");
-  let start = buf.indexOf(dashBoundary);
-  if (start < 0) return parts;
-  start += dashBoundary.length;
-  while (start < buf.length) {
-    if (buf[start] === 0x2d && buf[start + 1] === 0x2d) break; // trailing --
-    if (buf[start] === 0x0d) start += 2; // skip CRLF after boundary
-    const headerEnd = buf.indexOf(Buffer.from("\r\n\r\n"), start);
+  const headerSep = Buffer.from("\r\n\r\n");
+
+  let cursor = buf.indexOf(dashBoundary);
+  if (cursor < 0) return parts;
+
+  while (cursor < buf.length) {
+    // Move past `--boundary`.
+    let partStart = cursor + dashBoundary.length;
+    // End-of-multipart marker: `--boundary--`.
+    if (buf[partStart] === 0x2d && buf[partStart + 1] === 0x2d) break;
+    // Strip the CRLF that separates the boundary token from the headers.
+    if (buf[partStart] === 0x0d && buf[partStart + 1] === 0x0a) {
+      partStart += 2;
+    }
+
+    const headerEnd = buf.indexOf(headerSep, partStart);
     if (headerEnd < 0) break;
-    const headerStr = buf.slice(start, headerEnd).toString("utf8");
-    const nextBoundary = buf.indexOf(dashBoundary, headerEnd);
+    const headerStr = buf.slice(partStart, headerEnd).toString("utf8");
+    const dataStart = headerEnd + headerSep.length;
+
+    const nextBoundary = buf.indexOf(dashBoundary, dataStart);
     if (nextBoundary < 0) break;
-    const dataStart = headerEnd + 4;
-    const dataEnd = nextBoundary - 2; // strip preceding CRLF
+    // Strip the trailing CRLF that precedes the next boundary, if present.
+    let dataEnd = nextBoundary;
+    if (dataEnd >= 2 && buf[dataEnd - 2] === 0x0d && buf[dataEnd - 1] === 0x0a) {
+      dataEnd -= 2;
+    }
     const data = buf.slice(dataStart, dataEnd);
 
-    const disposition = /content-disposition:.*name="([^"]+)"(?:; filename="([^"]*)")?/i.exec(headerStr);
+    // Headers may span multiple lines. We only look at Content-Disposition
+    // and Content-Type. Use a permissive regex that tolerates extra params
+    // and quoted/unquoted values.
+    const nameMatch = /name="([^"]*)"|name=([^;\r\n]+)/i.exec(headerStr);
+    const filenameMatch = /filename="([^"]*)"|filename=([^;\r\n]+)/i.exec(headerStr);
     const typeMatch = /content-type:\s*([^\r\n]+)/i.exec(headerStr);
-    if (disposition) {
-      const name = disposition[1];
-      const filename = disposition[2];
+    if (nameMatch) {
+      const name = (nameMatch[1] ?? nameMatch[2] ?? "").trim();
+      const filename = filenameMatch ? (filenameMatch[1] ?? filenameMatch[2] ?? "").trim() : undefined;
       if (filename !== undefined) {
-        parts.push({ name, filename, contentType: typeMatch?.[1], data });
+        parts.push({ name, filename, contentType: typeMatch?.[1]?.trim(), data });
       } else {
         parts.push({ name, value: data.toString("utf8") });
       }
     }
-    start = nextBoundary + dashBoundary.length;
+
+    cursor = nextBoundary;
   }
   return parts;
 }

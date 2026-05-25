@@ -219,3 +219,10 @@
 - [x] Foreground in-app toast banner when a new chat notification arrives and recipient is on a different tab
 - [x] First-load seeding so historical alerts don't all toast on app open
 - [x] Bump version to 1.3.3
+
+## User Feedback — Round 20 (Upload "Missing file" 400 fix)
+- [x] Rewrite `parseMultipart` in server/_core/index.ts — robust per-part walker via `indexOf(dashBoundary)` instead of fragile incremental cursor
+- [x] Boundary regex now strips quotes (some clients send `boundary="----xxx"`)
+- [x] Tolerate quoted *and* unquoted `name=` and `filename=` parameters
+- [x] Empty-body and zero-part diagnostic logs added so future failures are debuggable
+- [x] Bump version to 1.3.4
