@@ -164,3 +164,10 @@
 - [x] Entire calendar button (including padding) now opens the date picker, not just the icon
 - [x] Refactored button: visual layer (icon + border) is pointer-events:none; HTML5 input fills 100% on web; Pressable absolute-fill on native
 - [x] Bump version to 1.1.6
+
+## User Feedback — Round 14 (Receipt-style bill view)
+- [x] Build shared BillReceipt component (header, line items, totals, status, due date, payment proof)
+- [x] Receipt is openable by both landlord and tenant from their respective bill rows
+- [x] Visual: monospaced/receipt-feel layout — landlord name on top, tenant below, period, line-by-line items with consumption/rate/amount, divider, total, paid/unpaid badge, due date, optional notes, payment proof image
+- [x] Server detail endpoints now return both landlord & tenant info plus enriched utility for line items
+- [x] Bump version to 1.2.0

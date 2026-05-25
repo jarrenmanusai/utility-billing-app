@@ -295,8 +295,18 @@ const landlordRouter = router({
       if (!bill || bill.landlordId !== ctx.user!.id) throw new TRPCError({ code: "NOT_FOUND" });
       const items = await db.listBillItems(bill.id);
       const tenant = await db.getUserById(bill.tenantId);
+      const landlord = await db.getUserById(bill.landlordId);
+      const utilitiesList = await db.listUtilities(bill.landlordId);
+      const utilByName = new Map(utilitiesList.map((u) => [u.id, u]));
+      const enriched = items.map((it) => ({ ...it, utility: utilByName.get(it.utilityId) ?? null }));
       const paymentsList = await db.getPaymentsForBill(bill.id);
-      return { bill, items, tenant: sanitizeUser(tenant), payments: paymentsList };
+      return {
+        bill,
+        items: enriched,
+        tenant: sanitizeUser(tenant),
+        landlord: sanitizeUser(landlord),
+        payments: paymentsList,
+      };
     }),
 
     save: landlordProcedure
@@ -552,7 +562,15 @@ const tenantRouter = router({
       const utilByName = new Map(utilitiesList.map((u) => [u.id, u]));
       const enriched = items.map((it) => ({ ...it, utility: utilByName.get(it.utilityId) ?? null }));
       const payments = await db.getPaymentsForBill(bill.id);
-      return { bill, items: enriched, payments };
+      const landlord = await db.getUserById(bill.landlordId);
+      const tenant = await db.getUserById(bill.tenantId);
+      return {
+        bill,
+        items: enriched,
+        payments,
+        landlord: sanitizeUser(landlord),
+        tenant: sanitizeUser(tenant),
+      };
     }),
 
     /** Upload payment proof. */
