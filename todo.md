@@ -201,3 +201,13 @@
 - [x] Each chip shows a relevant icon — grid (All), clock (Unpaid), check-circle (Paid), pencil (Draft) — for at-a-glance scanning
 - [x] Light press feedback (opacity 0.75) without scale transforms that could distort the row
 - [x] Bump version to 1.2.3
+
+## User Feedback — Round 18 (Premium emojis + attachment fix in chat)
+- [x] Build EmojiPicker component with categorised premium emoji set + recents + search
+- [x] Fix attachment button so it actually opens device photo library (web hidden input + native picker without falsely-denied permission pre-check)
+- [x] Camera permission asks with friendly fallback alert
+- [x] Reuse existing /api/upload + storage proxy path
+- [x] Wired into landlord chat (via shared ChatView)
+- [x] Wired into tenant chat (via shared ChatView)
+- [x] Caret-aware emoji insertion + persisted recents (AsyncStorage)
+- [x] Bump version to 1.3.0

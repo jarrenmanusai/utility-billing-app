@@ -86,6 +86,9 @@ const MAPPING = {
   "car.fill": "directions-car",
   "house.lodge.fill": "cottage",
   "leaf.fill": "eco",
+  "face.smiling": "sentiment-satisfied",
+  "hand.thumbsup.fill": "thumb-up",
+  "star.fill": "star",
 } satisfies IconMapping;
 
 /**

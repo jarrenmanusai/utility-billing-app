@@ -1,9 +1,20 @@
-import { useState } from "react";
-import { Alert, FlatList, Image, Platform, Pressable, Text, TextInput, View, KeyboardAvoidingView } from "react-native";
+import { useRef, useState } from "react";
+import {
+  Alert,
+  FlatList,
+  Image,
+  Platform,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+  KeyboardAvoidingView,
+} from "react-native";
 
 import { Button, ScreenHeader } from "@/components/ui/primitives";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
+import { EmojiPicker } from "@/components/emoji-picker";
 import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/lib/auth-context";
 import { formatDateTime } from "@/lib/format";
@@ -33,6 +44,10 @@ export function ChatView({ title, onBack, messages, onSend, isLoading }: ChatVie
   const colors = useColors();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  // Track caret position so emoji insertions land where the user is typing
+  // rather than always being appended at the end. Defaults to end-of-string.
+  const selectionRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
 
   const handleSend = async () => {
     const text = input.trim();
@@ -47,10 +62,10 @@ export function ChatView({ title, onBack, messages, onSend, isLoading }: ChatVie
   };
 
   const handleAttach = async (source: "camera" | "library") => {
-    const uri = await pickImage(source);
-    if (!uri) return;
-    setSending(true);
     try {
+      const uri = await pickImage(source);
+      if (!uri) return;
+      setSending(true);
       const url = await uploadImage(uri, "chat");
       await onSend(null, url, "image");
     } catch (err: any) {
@@ -58,6 +73,41 @@ export function ChatView({ title, onBack, messages, onSend, isLoading }: ChatVie
     } finally {
       setSending(false);
     }
+  };
+
+  /**
+   * Show the attachment chooser. On web there's no "Camera" option since we
+   * use a hidden file input — going straight to library is also faster on
+   * native when the user clearly wants to attach an image, but we still want
+   * the camera option for convenience there.
+   */
+  const handleAttachPress = () => {
+    if (Platform.OS === "web") {
+      handleAttach("library");
+      return;
+    }
+    Alert.alert("Attach", "Choose source", [
+      { text: "Take photo", onPress: () => handleAttach("camera") },
+      { text: "Choose from library", onPress: () => handleAttach("library") },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
+
+  /**
+   * Insert the picked emoji at the caret. We don't auto-close the picker
+   * because users frequently send 2-3 emojis in a row.
+   */
+  const handleEmojiSelect = (emoji: string) => {
+    setInput((prev) => {
+      const { start, end } = selectionRef.current;
+      const safeStart = Math.min(Math.max(start, 0), prev.length);
+      const safeEnd = Math.min(Math.max(end, safeStart), prev.length);
+      const next = prev.slice(0, safeStart) + emoji + prev.slice(safeEnd);
+      // Move caret to right after the inserted emoji.
+      const cursor = safeStart + emoji.length;
+      selectionRef.current = { start: cursor, end: cursor };
+      return next;
+    });
   };
 
   const resolveUrl = (url: string) => (url.startsWith("/") ? `${getApiBaseUrl()}${url}` : url);
@@ -109,28 +159,47 @@ export function ChatView({ title, onBack, messages, onSend, isLoading }: ChatVie
         />
         <View className="flex-row items-center gap-2 px-3 py-2 border-t border-border bg-background">
           <Pressable
-            onPress={() =>
-              Alert.alert("Attach", "Choose source", [
-                { text: "Camera", onPress: () => handleAttach("camera") },
-                { text: "Gallery", onPress: () => handleAttach("library") },
-                { text: "Cancel", style: "cancel" },
-              ])
-            }
+            onPress={handleAttachPress}
             hitSlop={8}
+            disabled={sending}
+            accessibilityRole="button"
+            accessibilityLabel="Attach photo"
             style={({ pressed }) => [pressed && { opacity: 0.6 }]}
           >
             <IconSymbol name="paperclip" size={22} color={colors.muted} />
           </Pressable>
-          <View className="flex-1 bg-surface rounded-2xl border border-border px-3 h-11 justify-center">
+          <View className="flex-1 bg-surface rounded-2xl border border-border px-3 h-11 flex-row items-center">
             <TextInput
               value={input}
               onChangeText={setInput}
               placeholder="Type a message…"
               placeholderTextColor={colors.muted}
-              style={{ color: colors.text, fontSize: 16, paddingVertical: 0 }}
+              style={{
+                flex: 1,
+                color: colors.text,
+                fontSize: 16,
+                paddingVertical: 0,
+              }}
               returnKeyType="send"
               onSubmitEditing={handleSend}
+              onSelectionChange={(e) => {
+                selectionRef.current = e.nativeEvent.selection;
+              }}
             />
+            <Pressable
+              onPress={() => setEmojiOpen(true)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Open emoji picker"
+              style={({ pressed }) => [
+                {
+                  paddingLeft: 8,
+                  opacity: pressed ? 0.6 : 1,
+                },
+              ]}
+            >
+              <IconSymbol name="face.smiling" size={22} color={colors.muted} />
+            </Pressable>
           </View>
           <Pressable
             onPress={handleSend}
@@ -147,6 +216,11 @@ export function ChatView({ title, onBack, messages, onSend, isLoading }: ChatVie
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+      <EmojiPicker
+        visible={emojiOpen}
+        onClose={() => setEmojiOpen(false)}
+        onSelect={handleEmojiSelect}
+      />
     </ScreenContainer>
   );
 }
