@@ -57,6 +57,8 @@ Bump all three in lock-step on every release.
 
 | Action | Command |
 |---|---|
+| **Install deps (FIRST, always)** | `pnpm install --frozen-lockfile` |
+| Pre-flight env conflict check | `pnpm check:env` |
 | Run dev server | `pnpm dev` |
 | Type-check | `pnpm check` |
 | Lint | `pnpm lint` |
@@ -66,6 +68,20 @@ Bump all three in lock-step on every release.
 | Pre-deploy audit | `pnpm verify:deploy` |
 | Probe deployed server | `curl https://<your-domain>/api/version` |
 | Build APK | `npx eas-cli build --platform android --profile production` |
+
+## Order of operations (matters)
+
+1. `pnpm install --frozen-lockfile` (or `tsx`/`drizzle-kit` won't be on PATH)
+2. `pnpm check:env` (override Manus runtime-injected OAuth/JWT_SECRET via
+   `webdev_request_secrets` per the printed recipe — see MANUS_HANDOFF.txt §4b)
+3. Set remaining secrets (DATABASE_URL is auto, EXPO_PUBLIC_API_URL after server publish)
+4. `pnpm db:push` (reads DATABASE_URL — must be set first)
+5. `pnpm seed:admin`
+6. `pnpm verify:deploy` (must be 0 failures)
+7. Publish tRPC server (Manus webdev Publish or your own host)
+8. `curl https://<domain>/api/version` (expect 1.6.0)
+9. `npx eas-cli build --platform android --profile production`
+10. Distribute APK
 
 ## Env vars at a glance
 

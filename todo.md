@@ -322,3 +322,11 @@
 - [x] Rewrite PUBLISHING.md to point to MANUS_HANDOFF.txt as source of truth
 - [x] Extend pnpm verify:deploy with API URL validation + dual-env-mismatch detection + live /api/version probe
 - [x] Add test coverage for the dual-env-var API base URL read (5 new tests in app-version.test.ts)
+
+## Redeploy hardening pass 2 (post-1.6.0)
+- [x] Stricter verify:deploy error messages with paste-ready webdev_request_secrets recipes for OAuth + JWT_SECRET
+- [x] MANUS_HANDOFF.txt 4b — override-runtime-injected-secrets recipe (preventMatching:true)
+- [x] MANUS_HANDOFF.txt 0 TL;DR rewrite — install-first, then check:env, then secrets, then DB
+- [x] PUBLISHING.md — added "Order of operations (matters)" section
+- [x] scripts/check-env-conflicts.ts (pnpm check:env) — pre-flight detector that prints exact override calls
+- [x] verify:deploy — added inline tip pointing at 4b for runtime-injected conflicts

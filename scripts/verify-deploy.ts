@@ -46,14 +46,38 @@ async function checkEnv() {
   ok("DATABASE_URL set");
 
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
-    return fail("JWT_SECRET set & strong", `len=${(process.env.JWT_SECRET || "").length} (require ≥32 chars)`);
+    return fail(
+      "JWT_SECRET set & strong",
+      `len=${(process.env.JWT_SECRET || "").length} (require ≥32 chars)\n` +
+        `         FIX: The Manus runtime auto-injects a short JWT_SECRET. Override it with:\n` +
+        `           webdev_request_secrets({\n` +
+        `             secrets: [{\n` +
+        `               key: "JWT_SECRET",\n` +
+        `               value: <96-char random hex>,   // node -e 'console.log(require("crypto").randomBytes(48).toString("hex"))'\n` +
+        `               preventMatching: true,\n` +
+        `               description: "Production JWT signing secret (overrides built-in)"\n` +
+        `             }]\n` +
+        `           })\n` +
+        `         DO NOT edit scripts/load-env.js to delete or override env vars at runtime.`,
+    );
   }
   ok("JWT_SECRET set & strong");
 
   if (process.env.OAUTH_SERVER_URL || process.env.OWNER_OPEN_ID) {
     return fail(
       "OAuth disabled",
-      `OAUTH_SERVER_URL=${process.env.OAUTH_SERVER_URL || "(unset)"}, OWNER_OPEN_ID=${process.env.OWNER_OPEN_ID || "(unset)"} — both must be unset`,
+      `OAUTH_SERVER_URL=${process.env.OAUTH_SERVER_URL || "(unset)"}, OWNER_OPEN_ID=${process.env.OWNER_OPEN_ID || "(unset)"} — both must be empty/unset.\n` +
+        `         FIX: The Manus runtime auto-injects these. Override BOTH to empty strings via webdev_request_secrets with preventMatching:true:\n` +
+        `           webdev_request_secrets({\n` +
+        `             secrets: [\n` +
+        `               { key: "OAUTH_SERVER_URL", value: "", preventMatching: true,\n` +
+        `                 description: "MUST be empty per MANUS_HANDOFF.txt §1 — disables Manus OAuth" },\n` +
+        `               { key: "OWNER_OPEN_ID",    value: "", preventMatching: true,\n` +
+        `                 description: "MUST be empty per MANUS_HANDOFF.txt §1 — disables Manus OAuth" }\n` +
+        `             ]\n` +
+        `           })\n` +
+        `         The OAuth gate in server/_core/index.ts treats empty strings as 'unset'. Restart the dev server after applying.\n` +
+        `         DO NOT edit scripts/load-env.js to delete these vars at runtime — that hides config drift and breaks debug.`,
     );
   }
   ok("OAuth disabled (no OAUTH_SERVER_URL / OWNER_OPEN_ID)");
@@ -213,6 +237,7 @@ async function checkApiUrlEnv() {
 
 async function main() {
   console.log("== verify-deploy ==");
+  console.log("   (Tip: run `pnpm check:env` first if you suspect runtime-injected env conflicts — see MANUS_HANDOFF.txt §4b)\n");
   try {
     await checkEnv();
     await checkSchema();

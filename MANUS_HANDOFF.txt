@@ -39,22 +39,30 @@ below is mechanical.
      from `main` and tag it as the current `constants/app-version.ts`
      value before proceeding.
   3. Use Node 22 + pnpm 9. Install with `pnpm install --frozen-lockfile`.
-     Before doing ANYTHING else, check for `.secrets.local.txt` in the
-     project root (see section 3a). If present, parse it and call
-     `webdev_request_secrets` for each non-comment KEY=VALUE line —
-     DO NOT ask the human for any secret that file already contains.
-  4. Provision a fresh MySQL 8 database. DROP the schema if one already
-     exists, then run drizzle migrations IN ORDER (section 5).
-  5. Set every secret from §3 of DEPLOY_PREREQUISITES.md via
-     `webdev_request_secrets`. Auto-loaded values from
-     `.secrets.local.txt` count — do not re-ask. NO Manus OAuth.
-  6. Run `pnpm seed:admin` (section 6). This wipes any leftover seed
+     This MUST happen before any `pnpm <script>` command (including
+     db:push, seed:admin, verify:deploy) — otherwise tsx, drizzle-kit,
+     and the seed script are not on PATH yet.
+  4. Pre-flight env conflict check: run `pnpm check:env`. This detects
+     Manus runtime-injected values (OAUTH_SERVER_URL, OWNER_OPEN_ID, weak
+     JWT_SECRET) and prints the exact `webdev_request_secrets` calls
+     needed to override them. See §4b for the full recipe.
+  5. Set every secret BEFORE provisioning the DB. Check for
+     `.secrets.local.txt` in the project root (see §4a). If present,
+     parse it and call `webdev_request_secrets` for each non-comment
+     KEY=VALUE line — DO NOT ask the human for any secret it contains.
+     Apply the §4b override recipe for OAUTH_SERVER_URL, OWNER_OPEN_ID,
+     and JWT_SECRET. Then ask the human only for what is still missing.
+     NO Manus OAuth.
+  6. Provision a fresh MySQL 8 database (DATABASE_URL must already be
+     set from step 5). DROP the schema if one already exists, then run
+     drizzle migrations IN ORDER (section 5).
+  7. Run `pnpm seed:admin` (section 6). This wipes any leftover seed
      accounts and creates exactly the configured admin.
-  7. Run `pnpm verify:deploy` and confirm zero failures.
-  8. Run `pnpm dev` to verify it boots locally; smoke-test sections 9 D-F.
-  9. Build the Android APK via EAS Build, JDK 21 image (section 7), using
+  8. Run `pnpm verify:deploy` and confirm zero failures.
+  9. Run `pnpm dev` to verify it boots locally; smoke-test sections 9 D-F.
+ 10. Build the Android APK via EAS Build, JDK 21 image (section 7), using
      the bundled `eas.json`.
- 10. Distribute the APK through whichever channel §6 of
+ 11. Distribute the APK through whichever channel §6 of
      DEPLOY_PREREQUISITES.md specifies (Direct link / Play Console /
      manual). Subsequent updates use the in-app Admin → App Updates panel.
 
@@ -206,8 +214,16 @@ file in the repo). The complete required set:
 
   EXPLICITLY DO NOT SET (so OAuth stays disabled)
   ------------------------------------------------
-  OAUTH_SERVER_URL          MUST be UNSET.
-  OWNER_OPEN_ID             MUST be UNSET.
+  OAUTH_SERVER_URL          MUST be empty/unset. The Manus webdev runtime
+  OWNER_OPEN_ID             AUTO-INJECTS these. To satisfy this rule, you
+                            MUST OVERRIDE them via `webdev_request_secrets`
+                            with `value: ""` and `preventMatching: true`.
+                            See §4b for the exact tool call. The OAuth gate
+                            in `server/_core/index.ts` treats empty strings
+                            as falsy, so empty-string overrides keep the
+                            /api/oauth/* routes from mounting. DO NOT edit
+                            scripts/load-env.js to delete these at runtime
+                            — that is a hack that hides config drift.
 
   BUILT-IN AI (auto-populated on Manus webdev)
   ---------------------------------------------
@@ -268,6 +284,77 @@ the Manus session.
 IF NO .secrets.local.txt EXISTS:
   Fall back to the standard §4 flow: ask the operator for each secret
   individually via `webdev_request_secrets` cards.
+
+
+================================================================================
+4b. OVERRIDING MANUS RUNTIME-INJECTED SECRETS
+================================================================================
+
+The Manus webdev sandbox auto-injects three values whose runtime
+defaults VIOLATE this project's deploy contract:
+
+  RUNTIME-INJECTED          DEPLOY CONTRACT REQUIRES
+  ------------------------- ----------------------------------------------
+  OAUTH_SERVER_URL          empty/unset (§1 hard rule)
+  OWNER_OPEN_ID             empty/unset (§1 hard rule)
+  JWT_SECRET (22 chars)     ≥32 chars (§4 + verify:deploy enforces)
+
+The agent MUST override all three using `webdev_request_secrets` with
+`preventMatching: true`. This is a documented, supported override path
+— NOT a hack. Do not invent runtime workarounds (do not edit
+scripts/load-env.js, do not `delete process.env.X` at boot).
+
+EXACT TOOL CALL (paste-ready)
+-----------------------------
+
+  // Step 1: disable OAuth (both vars must be empty strings)
+  webdev_request_secrets({
+    secrets: [
+      { key: "OAUTH_SERVER_URL", value: "", preventMatching: true,
+        description: "MUST be empty per MANUS_HANDOFF.txt §1 — disables Manus OAuth" },
+      { key: "OWNER_OPEN_ID",    value: "", preventMatching: true,
+        description: "MUST be empty per MANUS_HANDOFF.txt §1 — disables Manus OAuth" }
+    ]
+  })
+
+  // Step 2: install a strong JWT_SECRET (do NOT print the value to chat)
+  //   Generate with:
+  //     node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+  webdev_request_secrets({
+    secrets: [{
+      key: "JWT_SECRET",
+      value: "<96-char random hex>",
+      preventMatching: true,
+      description: "Production JWT signing secret (overrides the 22-char built-in)"
+    }]
+  })
+
+  // Step 3: restart the dev server so the new env values are loaded
+  webdev_restart_server({ brief: "reload after secret override" })
+
+AFTER OVERRIDING, RE-RUN: `pnpm verify:deploy`. All three previously
+failing audit lines should now pass:
+
+  ✓  DATABASE_URL set
+  ✓  JWT_SECRET set & strong
+  ✓  OAuth disabled (no OAUTH_SERVER_URL / OWNER_OPEN_ID)
+
+WHY THIS WORKS
+--------------
+
+  * The OAuth gate in `server/_core/index.ts` is
+      `if (process.env.OAUTH_SERVER_URL && process.env.OWNER_OPEN_ID)`.
+    Empty strings are falsy in JavaScript, so the gate stays closed and
+    `/api/oauth/*` routes never mount.
+  * `verify:deploy` checks the same falsy semantics for the OAuth pair
+    and a length-≥32 check for JWT_SECRET. Empty strings + a 96-char
+    secret both satisfy the audit.
+  * `preventMatching: true` tells webdev_request_secrets NOT to fall
+    back to the BYOK auto-match (which would re-inject the runtime
+    value).
+
+DO NOT confuse "override" with "delete". The values still exist (as
+empty strings); they're just truthy-falsy in the right way.
 
 
 ================================================================================
