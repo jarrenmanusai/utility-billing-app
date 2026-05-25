@@ -10,28 +10,38 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const envPath = path.resolve(process.cwd(), ".env");
-
-if (fs.existsSync(envPath)) {
-  const envContent = fs.readFileSync(envPath, "utf8");
-  const lines = envContent.split("\n");
-
-  lines.forEach((line) => {
-    // Skip comments and empty lines
-    if (!line || line.trim().startsWith("#")) return;
-
+/**
+ * Load a key=value file into process.env (only setting keys that aren't already set).
+ * Used for .env (committed defaults) and .secrets.local.txt (operator pre-stage).
+ * The first call wins per key — i.e., earlier files take precedence over later ones.
+ */
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  const content = fs.readFileSync(filePath, "utf8");
+  for (const line of content.split("\n")) {
+    if (!line || line.trim().startsWith("#")) continue;
     const match = line.match(/^([^=]+)=(.*)$/);
-    if (match) {
-      const key = match[1].trim();
-      const value = match[2].trim().replace(/^["']|["']$/g, ""); // Remove quotes
-
-      // Only set if not already defined in environment
-      if (!process.env[key]) {
-        process.env[key] = value;
-      }
+    if (!match) continue;
+    const key = match[1].trim();
+    const value = match[2].trim().replace(/^["']|["']$/g, ""); // strip optional quotes
+    if (!process.env[key]) {
+      process.env[key] = value;
     }
-  });
+  }
 }
+
+// Precedence (highest to lowest):
+//   1. Already-set system env (Manus runtime, shell exports) — NEVER overridden
+//   2. .env (committed defaults)
+//   3. .secrets.local.txt (operator-pre-staged, gitignored)
+//
+// We load .env first so committed defaults take precedence over local secret
+// files (which is the standard 12-factor pattern: defaults committed, real
+// values supplied per-environment). For operator-supplied secrets like
+// EXPO_TOKEN that don't appear in .env at all, .secrets.local.txt fills them.
+loadEnvFile(path.resolve(process.cwd(), ".env"));
+loadEnvFile(path.resolve(process.cwd(), ".secrets.local.txt"));
+loadEnvFile(path.resolve(process.cwd(), ".secrets.local"));
 
 // Map system variables to Expo public variables.
 // Notes:
