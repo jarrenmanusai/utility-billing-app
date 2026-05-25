@@ -59,7 +59,7 @@ export default function AboutScreen() {
 
         {/* What's inside */}
         <Card>
-          <Text className="text-base font-semibold text-foreground mb-2">What's inside</Text>
+          <Text className="text-base font-semibold text-foreground mb-2">What&apos;s inside</Text>
           <View className="gap-2">
             <FeatureRow icon="bolt.fill" label="Smart bill creation with OCR meter reading" />
             <FeatureRow icon="person.fill" label="Tenant management with one-tap billing" />

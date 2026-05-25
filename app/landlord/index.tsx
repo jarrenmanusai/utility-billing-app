@@ -239,7 +239,7 @@ function HomeTab({ goTo }: HomeTabProps) {
       ) : (
         <Card>
           <Text className="text-sm text-muted">
-            No bills yet. Tap "Create a new bill" above to get started.
+            No bills yet. Tap &quot;Create a new bill&quot; above to get started.
           </Text>
         </Card>
       )}
