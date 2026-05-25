@@ -259,3 +259,11 @@
 - [x] New vitest `tests/update-banner.test.ts` guards the semver compare logic that decides when to show the banner
 - [x] Bump version to 1.4.0 (significant feature)
 - [x] 48/48 tests pass, typecheck clean
+
+## User Feedback — Round 24 (Chat photo lightbox)
+- [x] Tapping a chat photo (landlord or tenant) now opens a full-screen lightbox modal
+- [x] Lightbox uses Image.getSize + resizeMode="contain" so the entire image is visible regardless of aspect ratio (no cropping)
+- [x] Tap anywhere on backdrop or the close button to dismiss; Android hardware back also dismisses
+- [x] Added a small expand glyph overlay on chat thumbnails so the action is discoverable
+- [x] Mapped `arrow.up.left.and.arrow.down.right` → MaterialIcons `open-in-full`
+- [x] Bump version to 1.4.1

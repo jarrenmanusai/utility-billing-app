@@ -64,6 +64,7 @@ const MAPPING = {
   "calendar": "calendar-today",
   "clock.fill": "schedule",
   "magnifyingglass": "search",
+  "arrow.up.left.and.arrow.down.right": "open-in-full",
   "line.3.horizontal": "menu",
   "ellipsis": "more-horiz",
   "banknote": "account-balance-wallet",
