@@ -258,33 +258,102 @@ async function checkApiUrlEnv() {
     );
   }
 
+  // M-1: Server-side API_BASE_URL (used by the tRPC server itself for
+  // self-referential URLs in emails, redirects, etc.) should agree with
+  // the mobile EXPO_PUBLIC_API_URL. They are independent envs and easy
+  // to drift apart.
+  const serverApi = process.env.API_BASE_URL;
+  if (serverApi && serverApi !== chosen) {
+    ok(
+      `API_BASE_URL=${serverApi} differs from EXPO_PUBLIC_API_URL=${chosen} ` +
+        `(non-fatal but worth confirming both point at the same deployment)`,
+    );
+  }
+
   // Best-effort live probe of /api/version. Skipped if the URL is
   // localhost or otherwise clearly not yet deployed; failures here are a
   // soft warning rather than a hard fail because the server may not be
   // running at audit time.
+  // M-3: 3-attempt retry with exponential backoff (250ms, 500ms, 1000ms).
+  // Cloud Run cold starts and intermittent network blips otherwise produce
+  // false-positive "server not deployed" warnings during cutover.
   if (/^https:\/\//i.test(chosen) && !/localhost|127\.0\.0\.1/.test(chosen)) {
-    try {
-      const res = await fetch(`${chosen.replace(/\/+$/, "")}/api/version`, {
-        method: "GET",
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!res.ok) {
-        ok(
-          `live /api/version probe returned HTTP ${res.status} (server may not be deployed yet — OK to ignore pre-publish)`,
-        );
-      } else {
+    let lastErr: Error | null = null;
+    let success = false;
+    for (let attempt = 0; attempt < 3 && !success; attempt++) {
+      if (attempt > 0) {
+        await new Promise((r) => setTimeout(r, 250 * Math.pow(2, attempt - 1)));
+      }
+      try {
+        const res = await fetch(`${chosen.replace(/\/+$/, "")}/api/version`, {
+          method: "GET",
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!res.ok) {
+          lastErr = new Error(`HTTP ${res.status}`);
+          continue;
+        }
         const body = (await res.json().catch(() => ({}))) as { version?: string };
         if (body.version) {
-          ok(`live /api/version reports ${body.version}`);
+          ok(`live /api/version reports ${body.version} (attempt ${attempt + 1}/3)`);
         } else {
-          ok("live /api/version reachable but response did not include `version`");
+          ok(
+            `live /api/version reachable but response did not include \`version\` (attempt ${attempt + 1}/3)`,
+          );
         }
+        success = true;
+      } catch (err) {
+        lastErr = err as Error;
       }
-    } catch (err) {
+    }
+    if (!success) {
       ok(
-        `live /api/version probe skipped: ${(err as Error).message} (OK pre-deploy)`,
+        `live /api/version probe skipped after 3 attempts: ${lastErr?.message ?? "unknown"} (OK pre-deploy)`,
       );
     }
+  }
+}
+
+async function checkKeystoreChoice() {
+  // H-3: KEYSTORE_CHOICE is only a hint string, but a typo silently lets
+  // the EAS build pick the wrong keystore. Validate strictly.
+  const v = (process.env.KEYSTORE_CHOICE ?? "").trim().toUpperCase();
+  if (!v) {
+    // Soft warn only; the build CLI will fall back to interactive prompt
+    // (which the agent's non-interactive flag will then refuse).
+    ok("KEYSTORE_CHOICE set", "unset (operator must answer at build time)");
+    return;
+  }
+  if (!/^[ABC]$/.test(v)) {
+    fail(
+      "KEYSTORE_CHOICE valid",
+      `value '${process.env.KEYSTORE_CHOICE}' is not one of A,B,C. ` +
+        `A = let EAS manage; B = upload existing; C = generate new local keystore.`
+    );
+    return;
+  }
+  ok("KEYSTORE_CHOICE valid", v);
+}
+
+async function checkTestSnapshot() {
+  // H-2: Compare runtime test count against tests/SNAPSHOT.txt to catch
+  // accidental test deletions or silently-skipped suites.
+  const fs = await import("fs");
+  if (!fs.existsSync("tests/SNAPSHOT.txt")) {
+    fail("test snapshot present", "tests/SNAPSHOT.txt missing");
+    return;
+  }
+  // Cheap delegation: shell-out to verify:tests so we share one parser.
+  // verify-tests.ts exits 0 / 1 / non-zero with a clear message.
+  const { execSync } = await import("child_process");
+  try {
+    execSync("pnpm --silent verify:tests", { stdio: "pipe" });
+    ok("test snapshot matches");
+  } catch (e: any) {
+    const stderr = (e.stderr ?? "").toString();
+    const stdout = (e.stdout ?? "").toString();
+    const last = (stderr + stdout).split("\n").filter(Boolean).pop() ?? "verify-tests failed";
+    fail("test snapshot matches", last);
   }
 }
 
@@ -298,6 +367,8 @@ async function main() {
     await checkVersionFiles();
     await checkEasProjectId();
     await checkApiUrlEnv();
+    await checkKeystoreChoice();
+    await checkTestSnapshot();
   } catch (err) {
     fail("unexpected error", String(err));
   }

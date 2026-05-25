@@ -32,6 +32,15 @@ if [[ "${CI:-}" == "true" ]] || [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
   exit 0
 fi
 
+# H-4: GitHub Codespaces sets CODESPACES=true. The bootstrap workflow
+# requires committing app.config.ts from a Codespace where node_modules
+# is not yet installed (so `pnpm check:env` would fail spuriously).
+# Skip the hook silently in Codespaces; the operator can still run
+# `pnpm check:env` manually if they want.
+if [[ "${CODESPACES:-}" == "true" ]] || [[ -n "${CODESPACE_NAME:-}" ]]; then
+  exit 0
+fi
+
 # Local developer machine — run the check.
 if ! command -v pnpm >/dev/null 2>&1; then
   echo "[precommit] pnpm not found — skipping env check"

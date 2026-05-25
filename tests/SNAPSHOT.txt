@@ -1,0 +1,31 @@
+# tests/SNAPSHOT.txt — known-good test inventory
+#
+# Update this file ONLY when adding or removing tests. The
+# pre-deploy `pnpm verify:tests` (and verify:deploy) compares the
+# current vitest run against this snapshot and fails the deploy if
+# they disagree. This catches accidental test deletions or skipped
+# suites that would otherwise silently pass CI.
+#
+# Format: lines starting with # or empty lines are ignored. The
+# first non-comment line MUST be a single integer (= total passing
+# test count expected). Optionally a second line gives the file
+# count, and subsequent lines list known test files (one per line,
+# relative to repo root, sorted) for additional drift detection.
+#
+# To regenerate after intentional test changes:
+#   pnpm test 2>&1 | tail -3   # note the "Tests  N passed (N)" line
+#   then update the integers below and the file list.
+#
+# This file is committed; do NOT add it to .gitignore.
+
+79
+9
+tests/app-version.test.ts
+tests/auth.logout.test.ts
+tests/captcha.test.ts
+tests/cascade-delete.test.ts
+tests/date-parse.test.ts
+tests/format-period.test.ts
+tests/format.test.ts
+tests/update-banner.test.ts
+tests/validation.test.ts
