@@ -90,12 +90,47 @@ function checkApiUrlMismatch() {
   }
 }
 
+/**
+ * Flag ephemeral sandbox URLs as conflicts. The Manus webdev sandbox
+ * exposes its dev server at `https://<port>-<hash>.manus.computer`.
+ * That URL stops resolving as soon as the sandbox hibernates, so
+ * shipping it baked into an APK guarantees the released app breaks
+ * within minutes of the next deploy. Only `*.manus.space` (or a
+ * customer-owned domain) should be used as `EXPO_PUBLIC_API_URL` for
+ * a production build.
+ */
+function checkApiUrlEphemeral() {
+  const url = process.env.EXPO_PUBLIC_API_URL ?? process.env.EXPO_PUBLIC_API_BASE_URL;
+  if (!url) return;
+  if (/\.manus\.computer(\b|\/|$)/i.test(url)) {
+    conflicts.push({
+      key: "EXPO_PUBLIC_API_URL",
+      reason: `ephemeral sandbox URL detected (${url}) — *.manus.computer expires when the sandbox hibernates and MUST NOT be shipped in an APK`,
+      fix:
+        `// 1) Click "Publish" in the Manus webdev UI (provisions a *.manus.space domain).\n` +
+        `// 2) Once Publish completes, override with the *.manus.space URL:\n` +
+        `webdev_request_secrets({\n  secrets: [{\n    key: "EXPO_PUBLIC_API_URL",\n    value: "https://<your-app>-<id>.manus.space",\n    preventMatching: true,\n    description: "Stable production HTTPS URL of the deployed tRPC server"\n  }]\n})\n` +
+        `// 3) Verify it returns the right version: curl https://<your-app>-<id>.manus.space/api/version`,
+    });
+  }
+  if (/^http:\/\//i.test(url)) {
+    conflicts.push({
+      key: "EXPO_PUBLIC_API_URL",
+      reason: `non-HTTPS URL (${url}) — Android cleartext traffic is blocked by default`,
+      fix:
+        `// Use the HTTPS variant of your production server:\n` +
+        `webdev_request_secrets({\n  secrets: [{\n    key: "EXPO_PUBLIC_API_URL",\n    value: "https://<your-app>-<id>.manus.space",\n    preventMatching: true,\n    description: "Production HTTPS URL of the deployed tRPC server"\n  }]\n})`,
+    });
+  }
+}
+
 function main() {
   console.log("== check:env (pre-flight) ==");
 
   checkOauthVars();
   checkJwtSecret();
   checkApiUrlMismatch();
+  checkApiUrlEphemeral();
 
   if (conflicts.length === 0) {
     console.log("  ✓  no env conflicts detected");

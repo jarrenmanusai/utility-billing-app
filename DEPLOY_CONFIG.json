@@ -1,0 +1,100 @@
+{
+  "_comment": "Operator-locked deploy defaults. Anything in this file MUST NOT be re-asked of the human operator. The agent reads this file as the authoritative source of truth for every default. Only EXPO_TOKEN and keystore choice are NOT here, because EXPO_TOKEN is a personal secret (never commit) and keystore choice is a one-time deploy decision (see DEPLOY_PREREQUISITES.md §4).",
+  "version": "1.0",
+  "appName": "UtilityFlow",
+  "appVersion": "1.6.0",
+  "repo": {
+    "url": "https://github.com/jarrenmanusai/utility-billing-app",
+    "branch": "main",
+    "tagStrategy": "latest-or-main-head",
+    "_comment_tagStrategy": "Use the highest semver tag if any exist; otherwise use main HEAD. Never tag during a build — see TAGGING.md."
+  },
+  "node": {
+    "version": "22",
+    "packageManager": "pnpm@9"
+  },
+  "secrets": {
+    "DATABASE_URL": {
+      "source": "manus-builtin",
+      "_comment": "Always use the Manus webdev built-in MySQL 8 — DO NOT ask the operator for a connection string."
+    },
+    "JWT_SECRET": {
+      "source": "auto-generate",
+      "lengthBytes": 48,
+      "encoding": "hex",
+      "_comment": "Generate fresh on every deploy via node crypto.randomBytes(48).toString('hex'). Override via webdev_request_secrets with preventMatching:true. The Manus runtime injects a 22-char placeholder that fails verify:deploy."
+    },
+    "OAUTH_SERVER_URL": {
+      "source": "force-empty",
+      "_comment": "Manus webdev runtime auto-injects this; the deploy contract requires it empty. Override via webdev_request_secrets with value:'' and preventMatching:true."
+    },
+    "OWNER_OPEN_ID": {
+      "source": "force-empty",
+      "_comment": "Same as OAUTH_SERVER_URL — must be empty to disable Manus OAuth route mounting."
+    },
+    "EXPO_PUBLIC_API_URL": {
+      "source": "derive-after-publish",
+      "_comment": "Set this AFTER webdev Publish provisions the *.manus.space URL. Never ship a *.manus.computer URL into the APK — those expire on sandbox hibernation."
+    },
+    "EXPO_TOKEN": {
+      "source": "operator-input",
+      "_comment": "MUST be requested from the human via webdev_request_secrets. Personal Expo access token; never commit."
+    }
+  },
+  "database": {
+    "engine": "mysql8",
+    "rebuildFromScratch": true,
+    "migrationOrder": ["0000", "0001", "0002"],
+    "seedAdmin": {
+      "command": "pnpm seed:admin",
+      "wipeBeforeSeed": true,
+      "email": "admin@utilitybill.app",
+      "_comment": "The admin email is set via env in seed-admin.ts. Operator can override with ADMIN_EMAIL env var."
+    }
+  },
+  "audit": {
+    "preDeployCommand": "pnpm verify:deploy",
+    "expectedPasses": 12,
+    "blockOnFailure": true
+  },
+  "build": {
+    "platform": "android",
+    "profile": "production",
+    "outputFormat": "apk",
+    "easImage": "ubuntu-22.04-jdk-21-ndk-r27b",
+    "_comment_image": "Locked to JDK 21 because expo-modules-core 2.x requires it. Older agents may try JDK 17 — that fails."
+  },
+  "distribution": {
+    "channel": "direct-download",
+    "_comment": "Default: upload APK to Manus storage and provide a public URL. Operator can override via DEPLOY_PREREQUISITES.md §6."
+  },
+  "domain": {
+    "useCustom": false,
+    "_comment": "Default: use the *.manus.space domain provisioned by webdev Publish. No DNS/HTTPS setup required."
+  },
+  "openQuestionsForOperator": [
+    {
+      "key": "EXPO_TOKEN",
+      "reason": "Personal access token; cannot be committed to repo",
+      "via": "webdev_request_secrets card"
+    },
+    {
+      "key": "keystore_choice",
+      "reason": "One-time decision: A=brand-new EAS-managed | B=reuse existing | C=BYO .jks",
+      "via": "single chat question; operator may pre-set via KEYSTORE_CHOICE=A|B|C in .secrets.local.txt"
+    }
+  ],
+  "doNotAsk": [
+    "Repo URL",
+    "Branch or tag",
+    "DATABASE_URL",
+    "JWT_SECRET (auto-generate)",
+    "EXPO_PUBLIC_API_URL (derive after publish)",
+    "First-install channel (default: direct download)",
+    "Custom domain (default: none)",
+    "Whether to enable Manus OAuth (NEVER)",
+    "App name (locked: UtilityFlow)",
+    "Build profile (locked: production .apk)",
+    "EAS image (locked: ubuntu-22.04-jdk-21-ndk-r27b)"
+  ]
+}

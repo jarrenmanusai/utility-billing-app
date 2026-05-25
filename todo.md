@@ -336,3 +336,10 @@
 - [x] simple-git-hooks pre-commit (sandbox-aware skip) — registered via pnpm hooks:install
 - [x] TAGGING.md — release tagging procedure + when-not-to-tag rules
 - [x] MANUS_HANDOFF.txt §0 step 2 — references TAGGING.md
+
+## Redeploy hardening pass 4 (post-1.6.0) - Maximize agent autonomy
+- [x] AGENT_QUICKSTART.md - the file the agent reads FIRST; lists allowed/forbidden questions
+- [x] DEPLOY_CONFIG.json - operator-locked deploy defaults (single source of truth)
+- [x] check:env extended to flag ephemeral *.manus.computer URLs and non-HTTPS URLs
+- [x] .github/workflows/ci.yml - lint/check/test/check:env on push and PR
+- [x] .secrets.template.txt - added KEYSTORE_CHOICE so operator can pre-answer the second question
