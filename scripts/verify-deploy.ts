@@ -42,11 +42,18 @@ function fail(name: string, detail: string) {
 }
 
 async function checkEnv() {
-  if (!process.env.DATABASE_URL) return fail("DATABASE_URL set", "missing");
-  ok("DATABASE_URL set");
+  // NOTE: this function intentionally collects ALL env failures rather than
+  // bailing on the first one — that way the agent sees the full set of
+  // overrides it needs to apply via webdev_request_secrets in a single shot,
+  // not three iterations of (fix → re-run → see next fail).
+  if (!process.env.DATABASE_URL) {
+    fail("DATABASE_URL set", "missing");
+  } else {
+    ok("DATABASE_URL set");
+  }
 
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
-    return fail(
+    fail(
       "JWT_SECRET set & strong",
       `len=${(process.env.JWT_SECRET || "").length} (require ≥32 chars)\n` +
         `         FIX: The Manus runtime auto-injects a short JWT_SECRET. Override it with:\n` +
@@ -60,11 +67,12 @@ async function checkEnv() {
         `           })\n` +
         `         DO NOT edit scripts/load-env.js to delete or override env vars at runtime.`,
     );
+  } else {
+    ok("JWT_SECRET set & strong");
   }
-  ok("JWT_SECRET set & strong");
 
   if (process.env.OAUTH_SERVER_URL || process.env.OWNER_OPEN_ID) {
-    return fail(
+    fail(
       "OAuth disabled",
       `OAUTH_SERVER_URL=${process.env.OAUTH_SERVER_URL || "(unset)"}, OWNER_OPEN_ID=${process.env.OWNER_OPEN_ID || "(unset)"} — both must be empty/unset.\n` +
         `         FIX: The Manus runtime auto-injects these. Override BOTH to empty strings via webdev_request_secrets with preventMatching:true:\n` +
@@ -79,8 +87,29 @@ async function checkEnv() {
         `         The OAuth gate in server/_core/index.ts treats empty strings as 'unset'. Restart the dev server after applying.\n` +
         `         DO NOT edit scripts/load-env.js to delete these vars at runtime — that hides config drift and breaks debug.`,
     );
+  } else {
+    ok("OAuth disabled (no OAUTH_SERVER_URL / OWNER_OPEN_ID)");
   }
-  ok("OAuth disabled (no OAUTH_SERVER_URL / OWNER_OPEN_ID)");
+}
+
+async function checkEasProjectId() {
+  const fs = await import("node:fs/promises");
+  const cfg = await fs.readFile("app.config.ts", "utf-8");
+  const m = cfg.match(/projectId\s*:\s*['"`]([^'"`]+)['"`]/);
+  if (!m) {
+    return fail(
+      "EAS projectId configured",
+      `app.config.ts has no extra.eas.projectId.\n` +
+        `         The first 'eas build' will fail in --non-interactive mode without one.\n` +
+        `         FIX (one-time, run on operator's local machine — NOT in this sandbox):\n` +
+        `           export EXPO_TOKEN=<your-token>\n` +
+        `           npx eas-cli init           # creates project on expo.dev, injects projectId\n` +
+        `           git add app.config.ts && git commit -m 'chore: add eas projectId' && git push\n` +
+        `         Then re-run this audit. The agent can never bootstrap this from a sandbox\n` +
+        `         because eas init requires an interactive TTY for the project-naming prompt.`,
+    );
+  }
+  ok(`EAS projectId configured (${m[1].slice(0, 8)}…)`);
 }
 
 async function checkSchema() {
@@ -192,6 +221,30 @@ async function checkApiUrlEnv() {
       `value=${chosen.slice(0, 64)}… — must start with http:// or https://`,
     );
   }
+  // Catch ephemeral sandbox URLs that would brick an APK after sandbox
+  // hibernation (~30 min). These are recognizable by the *.manus.computer
+  // domain that Manus webdev exposes for live preview. Production must use
+  // *.manus.space (Manus Cloud) or a custom HTTPS domain.
+  if (/\.manus\.computer\b/i.test(chosen)) {
+    return fail(
+      "EXPO_PUBLIC_API_URL is not an ephemeral sandbox URL",
+      `value=${chosen}\n` +
+        `         This is a Manus webdev sandbox preview URL. It will stop\n` +
+        `         resolving when the sandbox hibernates (~30 min idle), and any\n` +
+        `         APK shipped with this URL will be permanently dead.\n` +
+        `         FIX: Click "Publish" in the Manus webdev UI to provision a\n` +
+        `         persistent *.manus.space domain, then set:\n` +
+        `           webdev_request_secrets({\n` +
+        `             secrets: [{\n` +
+        `               key: "EXPO_PUBLIC_API_URL",\n` +
+        `               value: "https://<your-app>.manus.space",\n` +
+        `               preventMatching: true\n` +
+        `             }]\n` +
+        `           })\n` +
+        `         Then restart the dev server and re-run this audit.`,
+    );
+  }
+
   if (/^http:\/\//i.test(chosen)) {
     ok(`EXPO_PUBLIC_API_URL set (⚠  http:// — production should use https://): ${chosen}`);
   } else {
@@ -243,6 +296,7 @@ async function main() {
     await checkSchema();
     await checkAdmin();
     await checkVersionFiles();
+    await checkEasProjectId();
     await checkApiUrlEnv();
   } catch (err) {
     fail("unexpected error", String(err));

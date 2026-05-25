@@ -19,7 +19,7 @@ to the values in `MANUS_HANDOFF.txt` §3 and enforced by `pnpm verify:deploy`.
 | 4. Seed admin | `pnpm seed:admin` — creates exactly one admin row | `MANUS_HANDOFF.txt` §6 |
 | 5. Audit | `pnpm verify:deploy` — must report 0 failures | `scripts/verify-deploy.ts` |
 | 6. Publish server | Deploy the Node tRPC server to `*.manus.space` (or your own host) | `MANUS_HANDOFF.txt` §7 |
-| 7. Build APK | `eas build --platform android --profile production` (JDK 21 image, pre-pinned in `eas.json`) | `MANUS_HANDOFF.txt` §7 |
+| 7. Build APK | `EAS_NO_VCS=1 eas build --platform android --profile production --non-interactive --no-wait` (JDK 21 image, pre-pinned in `eas.json`) | `MANUS_HANDOFF.txt` §7 |
 | 8. Distribute first APK | Direct link / Play Console / etc. | `DEPLOY_PREREQUISITES.md` §6 |
 | 9. Future updates | Sign in as admin → Settings → App updates → upload signed APK | `MANUS_HANDOFF.txt` §7 |
 
@@ -67,7 +67,7 @@ Bump all three in lock-step on every release.
 | Seed exactly one admin | `pnpm seed:admin` |
 | Pre-deploy audit | `pnpm verify:deploy` |
 | Probe deployed server | `curl https://<your-domain>/api/version` |
-| Build APK | `npx eas-cli build --platform android --profile production` |
+| Build APK | `EAS_NO_VCS=1 npx eas-cli build --platform android --profile production --non-interactive --no-wait` |
 
 ## Order of operations (matters)
 
@@ -80,7 +80,7 @@ Bump all three in lock-step on every release.
 6. `pnpm verify:deploy` (must be 0 failures)
 7. Publish tRPC server (Manus webdev Publish or your own host)
 8. `curl https://<domain>/api/version` (expect 1.6.0)
-9. `npx eas-cli build --platform android --profile production`
+9. `EAS_NO_VCS=1 npx eas-cli build --platform android --profile production --non-interactive --no-wait`
 10. Distribute APK
 
 ## Env vars at a glance

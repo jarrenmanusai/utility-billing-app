@@ -17,8 +17,45 @@
 7. Set EXPO_PUBLIC_API_URL = the *.manus.space URL from step 6
    (via webdev_request_secrets, preventMatching:true)
 8. Ask operator for EXPO_TOKEN + keystore choice (the ONLY two questions)
-   then: npx eas-cli build --platform android --profile production
+   then run NON-INTERACTIVE so EAS never prompts:
+     EXPO_TOKEN=<from operator> EAS_NO_VCS=1 \
+       npx eas-cli build --platform android --profile production \
+         --non-interactive --no-wait
 ```
+
+## CRITICAL: First-time-ever EAS bootstrap (one-time per project)
+
+The **very first** EAS build for a project requires creating an EAS
+`projectId` and uploading initial credentials. This step **cannot run
+fully non-interactively** without prior setup. `pnpm verify:deploy`
+includes a check for `extra.eas.projectId` in `app.config.ts`:
+
+```ts
+extra: {
+  eas: { projectId: "<uuid>" }
+}
+```
+
+If that field is missing, the audit fails with a paste-ready fix:
+
+1. **Recommended:** the operator runs ONCE on their LOCAL machine:
+   ```
+   export EXPO_TOKEN=<token>
+   npx eas-cli init                  # interactive — creates project on expo.dev,
+                                    # injects extra.eas.projectId into app.config
+   git add app.config.ts && git commit -m "chore: add eas projectId" && git push
+   ```
+   After that, every future agent build is fully `--non-interactive`.
+
+2. **Skip step:** the agent runs `pnpm verify:deploy`, sees the
+   "EAS projectId configured" failure, prints the exact `eas init`
+   command for the operator to run, and stops. Operator runs it locally,
+   pushes, and the agent retries. This adds ONE extra round-trip but no
+   sandbox hand-holding.
+
+The agent must NEVER try to run `eas init` from inside the Manus
+sandbox — it requires an interactive TTY for the project-naming prompt
+and will hang or fail there.
 
 ## The two questions you ARE allowed to ask
 

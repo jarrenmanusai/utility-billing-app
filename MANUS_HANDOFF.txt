@@ -503,13 +503,25 @@ run `eas build:configure`.
            npx eas-cli credentials  → Android → production → Set up a new
          keystore → "Upload a keystore" → paste the four secrets.
 
-  4) Build:
-       npx eas-cli build --platform android --profile production
+  4) Build (NON-INTERACTIVE — required for hands-off agent runs):
+       export EAS_NO_VCS=1                # don't fail on uncommitted changes
+       npx eas-cli build --platform android --profile production \
+         --non-interactive \
+         --no-wait                        # returns immediately with a build URL
      Wait for the cloud build to finish (~10–25 min). The dashboard
-     produces a downloadable .apk URL.
+     produces a downloadable .apk URL. Without --non-interactive EAS
+     will block on a TTY prompt for keystore generation, project link,
+     etc. — which a sandbox agent cannot answer.
+
+     For Option A (brand-new EAS-managed keystore) the FIRST build still
+     needs to authorise keystore creation. With --non-interactive +
+     EXPO_TOKEN this is auto-approved silently — BUT only if the project
+     already has an `extra.eas.projectId` (see AGENT_QUICKSTART.md
+     "First-time-ever EAS bootstrap" — do `eas init` LOCALLY first).
 
   5) (Optional) Build an .aab for Play Store:
-       npx eas-cli build --platform android --profile production-aab
+       EAS_NO_VCS=1 npx eas-cli build --platform android --profile production-aab \
+         --non-interactive --no-wait
 
 Local build path (only if you cannot use EAS)
 ----------------------------------------------
@@ -704,7 +716,7 @@ pass. If even one fails, STOP and fix before shipping.
          version only (a newer version re-shows it).
 
   G. NATIVE BUILD  (requires a real Android device — defer to operator)
-     [ ] `npx eas-cli build --platform android --profile production`
+     [ ] `EAS_NO_VCS=1 npx eas-cli build --platform android --profile production --non-interactive --no-wait`
          finishes without errors using the JDK 21 image.
      [ ] The produced .apk installs on a real Android 7+ device.
      [ ] The installed app reports the correct version under
