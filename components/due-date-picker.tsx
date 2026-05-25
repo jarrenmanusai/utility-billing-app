@@ -128,37 +128,53 @@ export function DueDatePicker({
           />
         </View>
 
-        {/* Calendar button — opens native picker on iOS/Android, HTML5 picker on web */}
+        {/* Calendar button — opens native picker on iOS/Android, HTML5 picker on web.
+            On web, the entire 48x48 area is the HTML5 date input itself (transparent),
+            with the icon rendered behind it via pointer-events:none so the input always
+            receives clicks across the full button surface. */}
         <View
           style={{
             width: 48,
             height: 48,
-            borderRadius: 12,
-            borderWidth: 1,
-            borderColor: colors.border,
-            backgroundColor: colors.surface,
-            alignItems: "center",
-            justifyContent: "center",
             marginBottom: 2,
-            overflow: "hidden",
             position: "relative",
           }}
         >
-          <IconSymbol name="calendar" size={22} color={colors.tint} />
+          {/* Visual layer: the bordered box with the calendar icon — non-interactive */}
+          <View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.surface,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <IconSymbol name="calendar" size={22} color={colors.tint} />
+          </View>
+
+          {/* Interaction layer: covers the entire 48x48 area */}
           {Platform.OS === "web" ? (
             // A REAL HTML5 date input stretched to fill the button.
-            // Made transparent (opacity:0) but kept on-screen and pointer-event-eligible
-            // so the browser will reliably show the date picker on click.
-            // Using React's web input via createElement keeps RN-Web from stripping it.
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            // Transparent but on-screen and pointer-event-eligible so clicking ANYWHERE
+            // in the 48x48 button (including padding) opens the date picker.
             (require("react").createElement("input", {
               type: "date",
               value: parsed ? toIsoDate(parsed.date) : "",
               onChange: handleWebInputChange,
               "aria-label": "Open calendar picker",
+              title: "Open calendar picker",
               style: {
                 position: "absolute",
-                inset: 0,
+                top: 0,
+                left: 0,
                 width: "100%",
                 height: "100%",
                 opacity: 0,
@@ -168,15 +184,22 @@ export function DueDatePicker({
                 margin: 0,
                 background: "transparent",
                 color: "transparent",
+                zIndex: 2,
               },
             }) as unknown as React.ReactElement)
           ) : (
             <Pressable
               onPress={() => setPickerOpen(true)}
               accessibilityLabel="Open calendar picker"
-              hitSlop={4}
               style={({ pressed }) => [
-                { position: "absolute", inset: 0 },
+                {
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  borderRadius: 12,
+                },
                 pressed && { opacity: 0.6 },
               ]}
             />

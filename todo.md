@@ -159,3 +159,8 @@
 ## User Feedback — Round 12 (Calendar button click fix)
 - [x] Calendar button next to Due Date opens the picker reliably (web uses overlapping native HTML5 date input; iOS/Android use modal/inline picker)
 - [x] Bump version to 1.1.5
+
+## User Feedback — Round 13 (Calendar button full-area click)
+- [x] Entire calendar button (including padding) now opens the date picker, not just the icon
+- [x] Refactored button: visual layer (icon + border) is pointer-events:none; HTML5 input fills 100% on web; Pressable absolute-fill on native
+- [x] Bump version to 1.1.6
