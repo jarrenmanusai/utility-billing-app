@@ -787,8 +787,79 @@ const adminRouter = router({
       }),
     publish: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
       await db.publishApkRelease(input.id);
-      return { ok: true };
+      // Fan-out an in-app `app_update` notification to every active
+      // landlord+tenant so they can be prompted to download the APK.
+      const release = await db.getApkReleaseById(input.id);
+      if (release) {
+        const userIds = await db.listActiveLandlordAndTenantIds();
+        const trimmedNotes = release.notes ? release.notes.trim().slice(0, 220) : "";
+        const body = trimmedNotes
+          ? `Version ${release.version} is now available. ${trimmedNotes}`
+          : `Version ${release.version} is now available. Tap to download.`;
+        const payload = JSON.stringify({
+          releaseId: release.id,
+          version: release.version,
+          fileUrl: release.fileUrl,
+        });
+        await Promise.all(
+          userIds.map((uid) =>
+            db.createNotification({
+              userId: uid,
+              type: "app_update",
+              title: "New update available",
+              body,
+              payload,
+            }),
+          ),
+        );
+      }
+      return { ok: true, notified: release ? (await db.listActiveLandlordAndTenantIds()).length : 0 };
     }),
+    /**
+     * Convenience for the admin App Updates panel: take an already-uploaded
+     * APK URL plus version + notes, atomically create the release record AND
+     * mark it live (which also fans out notifications). Saves the admin from
+     * doing two taps when the intent is always "deploy this APK now".
+     */
+    deploy: adminProcedure
+      .input(
+        z.object({
+          version: z.string().min(1).max(32),
+          fileUrl: z.string().min(1).max(500),
+          notes: z.string().max(2000).optional(),
+        }),
+      )
+      .mutation(async ({ input }) => {
+        const id = await db.createApkRelease({
+          version: input.version.trim(),
+          fileUrl: input.fileUrl.trim(),
+          notes: input.notes?.trim() || null,
+        });
+        await db.publishApkRelease(id);
+        const release = await db.getApkReleaseById(id);
+        const userIds = await db.listActiveLandlordAndTenantIds();
+        const trimmedNotes = release?.notes ? release.notes.trim().slice(0, 220) : "";
+        const body = trimmedNotes
+          ? `Version ${input.version} is now available. ${trimmedNotes}`
+          : `Version ${input.version} is now available. Tap to download.`;
+        const payload = JSON.stringify({
+          releaseId: id,
+          version: input.version,
+          fileUrl: input.fileUrl,
+        });
+        await Promise.all(
+          userIds.map((uid) =>
+            db.createNotification({
+              userId: uid,
+              type: "app_update",
+              title: "New update available",
+              body,
+              payload,
+            }),
+          ),
+        );
+        return { id, notified: userIds.length };
+      }),
     delete: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
       await db.deleteApkRelease(input.id);
       return { ok: true };

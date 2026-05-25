@@ -71,13 +71,23 @@ function destinationFor(item: NotificationItem, role: NotificationRole): string 
       if (role === "landlord" && typeof id === "number") return `/landlord/bills/${id}`;
       return null;
     }
+    case "app_update":
+      // Both roles route to the same shared download screen.
+      return "/get-app";
     default:
       return null;
   }
 }
 
 /** Pick a leading icon by notification type so the list scans quickly. */
-function iconFor(type: string): "bell.fill" | "envelope.fill" | "doc.text.fill" | "checkmark.seal.fill" {
+function iconFor(
+  type: string,
+):
+  | "bell.fill"
+  | "envelope.fill"
+  | "doc.text.fill"
+  | "checkmark.seal.fill"
+  | "arrow.down.app.fill" {
   switch (type) {
     case "chat_message":
       return "envelope.fill";
@@ -87,6 +97,8 @@ function iconFor(type: string): "bell.fill" | "envelope.fill" | "doc.text.fill" 
     case "payment_verified":
     case "account_approved":
       return "checkmark.seal.fill";
+    case "app_update":
+      return "arrow.down.app.fill";
     default:
       return "bell.fill";
   }

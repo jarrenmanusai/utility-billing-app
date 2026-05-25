@@ -65,7 +65,9 @@ async function startServer() {
   });
 
   // Simple image upload endpoint - accepts multipart/form-data with `file` and optional `folder`.
-  app.post("/api/upload", express.raw({ type: "multipart/form-data", limit: "25mb" }), async (req, res) => {
+  // Limit raised to 100mb to support APK uploads from the admin App Updates panel.
+  // Image uploads still come through the same endpoint and are well under this cap.
+  app.post("/api/upload", express.raw({ type: "multipart/form-data", limit: "100mb" }), async (req, res) => {
     try {
       const auth = req.headers.authorization;
       if (!auth?.startsWith("Bearer ")) {

@@ -535,45 +535,181 @@ function AntiSpamTab() {
 function ReleasesTab() {
   const list = trpc.admin.releases.list.useQuery();
   const utils = trpc.useUtils();
+  const toast = useToast();
+  const confirm = useConfirm();
+
   const [version, setVersion] = useState("");
   const [fileUrl, setFileUrl] = useState("");
   const [notes, setNotes] = useState("");
+  const [pickedName, setPickedName] = useState<string | null>(null);
+  const [pickedSize, setPickedSize] = useState<number | null>(null);
+  const [uploading, setUploading] = useState(false);
 
-  const create = trpc.admin.releases.create.useMutation({
-    onSuccess: () => {
+  const colors = useColors();
+
+  const deploy = trpc.admin.releases.deploy.useMutation({
+    onSuccess: (data, variables) => {
       utils.admin.releases.list.invalidate();
       setVersion("");
       setFileUrl("");
       setNotes("");
-      Alert.alert("Saved", "Release uploaded. Tap Publish to make it live.");
+      setPickedName(null);
+      setPickedSize(null);
+      const v = variables?.version ?? "";
+      const n = data.notified ?? 0;
+      toast(`Deployed v${v} \u2014 notified ${n} user${n === 1 ? "" : "s"}.`, {
+        variant: "success",
+        duration: 3500,
+      });
     },
+    onError: (e) => toast(e.message ?? "Deploy failed", { variant: "error" }),
   });
-  const publish = trpc.admin.releases.publish.useMutation({ onSuccess: () => utils.admin.releases.list.invalidate() });
-  const del = trpc.admin.releases.delete.useMutation({ onSuccess: () => utils.admin.releases.list.invalidate() });
+  const publish = trpc.admin.releases.publish.useMutation({
+    onSuccess: () => {
+      utils.admin.releases.list.invalidate();
+      toast("Release published and users notified", { variant: "success" });
+    },
+    onError: (e) => toast(e.message ?? "Publish failed", { variant: "error" }),
+  });
+  const del = trpc.admin.releases.delete.useMutation({
+    onSuccess: () => {
+      utils.admin.releases.list.invalidate();
+      toast("Release deleted", { variant: "success" });
+    },
+    onError: (e) => toast(e.message ?? "Delete failed", { variant: "error" }),
+  });
+
+  const onPickApk = async () => {
+    try {
+      const { pickFile, uploadFile } = await import("@/lib/upload-file");
+      // Accept .apk plus the standard Android package MIME type. On web the
+      // browser uses `accept` to filter; on native we pass the same string
+      // through expo-document-picker.
+      const picked = await pickFile(".apk,application/vnd.android.package-archive");
+      if (!picked) return;
+      setPickedName(picked.name);
+      setPickedSize(picked.size ?? null);
+      setUploading(true);
+      const url = await uploadFile(picked, "releases");
+      setFileUrl(url);
+      toast("APK uploaded — fill in version + notes, then Deploy", { variant: "success", duration: 3500 });
+    } catch (e: any) {
+      toast(e?.message ?? "Upload failed", { variant: "error", duration: 4500 });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const formatBytes = (n?: number | null) => {
+    if (!n || n <= 0) return "";
+    const mb = n / (1024 * 1024);
+    if (mb >= 1) return `${mb.toFixed(1)} MB`;
+    return `${(n / 1024).toFixed(0)} KB`;
+  };
+
+  const onDeploy = async () => {
+    if (!version.trim()) return toast("Version is required (e.g. 1.4.0)", { variant: "error" });
+    if (!fileUrl.trim()) return toast("Upload an APK or paste an APK URL first", { variant: "error" });
+    const ok = await confirm({
+      title: `Deploy v${version.trim()}?`,
+      message: "All active landlords and tenants will be notified to download the new update.",
+      confirmLabel: "Deploy",
+      icon: "arrow.up.app.fill",
+    });
+    if (!ok) return;
+    deploy.mutate({
+      version: version.trim(),
+      fileUrl: fileUrl.trim(),
+      notes: notes.trim() || undefined,
+    });
+  };
+
+  const onDelete = (id: number, ver: string) =>
+    confirm({
+      title: `Delete v${ver}?`,
+      message: "The release record is removed. Already-installed apps are unaffected.",
+      confirmLabel: "Delete",
+      destructive: true,
+      icon: "trash.fill",
+    }).then((ok) => {
+      if (ok) del.mutate({ id });
+    });
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
-      <Text className="text-xl font-bold text-foreground">APK releases</Text>
+      <Text className="text-xl font-bold text-foreground">App updates</Text>
+      <Text className="text-xs text-muted">
+        Upload an APK and deploy a new version. Every active landlord and tenant
+        will receive an in-app alert prompting them to download the update.
+      </Text>
 
       <Card>
-        <Text className="text-base font-semibold text-foreground mb-2">New release</Text>
-        <TextField label="Version (e.g. 1.2.0)" value={version} onChangeText={setVersion} autoCapitalize="none" />
+        <Text className="text-base font-semibold text-foreground mb-2">Deploy new version</Text>
+
+        {/* APK file picker */}
+        <Text className="text-sm font-medium text-foreground mb-1">APK file</Text>
+        <Pressable
+          onPress={uploading ? undefined : onPickApk}
+          style={({ pressed }) => [
+            {
+              opacity: pressed && !uploading ? 0.7 : 1,
+              borderWidth: 1,
+              borderStyle: "dashed",
+              borderColor: colors.border,
+              borderRadius: 12,
+              padding: 14,
+              backgroundColor: colors.surface,
+            },
+          ]}
+        >
+          <View className="flex-row items-center gap-3">
+            <View
+              className="w-10 h-10 rounded-full items-center justify-center"
+              style={{ backgroundColor: colors.background }}
+            >
+              <IconSymbol
+                name={pickedName ? "checkmark.seal.fill" : "arrow.up.app.fill"}
+                size={20}
+                color={pickedName ? colors.success : colors.tint}
+              />
+            </View>
+            <View className="flex-1">
+              <Text className="text-sm font-semibold text-foreground" numberOfLines={1}>
+                {uploading ? "Uploading APK\u2026" : pickedName ? pickedName : "Tap to choose an APK"}
+              </Text>
+              <Text className="text-xs text-muted" numberOfLines={1}>
+                {uploading
+                  ? "This may take a minute on slow connections."
+                  : pickedName
+                  ? `${formatBytes(pickedSize)} \u00b7 ready to deploy`
+                  : "Accepts .apk \u00b7 max 100 MB"}
+              </Text>
+            </View>
+          </View>
+        </Pressable>
+
+        <View className="h-3" />
+        <TextField label="Version (e.g. 1.4.0)" value={version} onChangeText={setVersion} autoCapitalize="none" placeholder="1.4.0" />
         <View className="h-2" />
-        <TextField label="APK URL" value={fileUrl} onChangeText={setFileUrl} autoCapitalize="none" />
+        <TextField
+          label="APK URL (auto-filled after upload)"
+          value={fileUrl}
+          onChangeText={setFileUrl}
+          autoCapitalize="none"
+          placeholder="https://\u2026"
+        />
         <View className="h-2" />
-        <TextField label="Release notes" value={notes} onChangeText={setNotes} multiline />
+        <TextField label="Release notes (optional)" value={notes} onChangeText={setNotes} placeholder="What's new in this release?" />
         <View className="h-3" />
         <Button
-          title="Save release"
+          title="Deploy update"
           icon="arrow.up.app.fill"
-          onPress={() => {
-            if (!version || !fileUrl) return Alert.alert("Missing", "Version and URL are required.");
-            create.mutate({ version, fileUrl, notes: notes || undefined });
-          }}
-          loading={create.isPending}
+          onPress={onDeploy}
+          loading={deploy.isPending || uploading}
         />
       </Card>
 
+      <Text className="text-base font-semibold text-foreground mt-2">Release history</Text>
       {(list.data ?? []).length === 0 ? (
         <EmptyState icon="arrow.down.app.fill" title="No releases yet" />
       ) : (
@@ -590,8 +726,19 @@ function ReleasesTab() {
             </View>
             {r.notes ? <Text className="text-sm text-muted mb-2">{r.notes}</Text> : null}
             <View className="flex-row gap-2 flex-wrap">
-              {!r.isLive ? <Button title="Publish" onPress={() => publish.mutate({ id: r.id })} loading={publish.isPending} /> : null}
-              <Button title="Delete" variant="danger" onPress={() => del.mutate({ id: r.id })} />
+              {!r.isLive ? (
+                <Button
+                  title="Publish & notify"
+                  icon="paperplane.fill"
+                  onPress={() => publish.mutate({ id: r.id })}
+                  loading={publish.isPending}
+                />
+              ) : null}
+              <Button
+                title="Delete"
+                variant="danger"
+                onPress={() => onDelete(r.id, r.version)}
+              />
             </View>
           </Card>
         ))

@@ -534,6 +534,36 @@ export async function getLiveApkRelease() {
   return r[0];
 }
 
+/**
+ * Look up an APK release by id (used when admin publishes a specific record so
+ * we can include the version + notes in the fan-out notification body).
+ */
+export async function getApkReleaseById(id: number) {
+  const db = await requireDb();
+  const r = await db.select().from(apkReleases).where(eq(apkReleases.id, id)).limit(1);
+  return r[0];
+}
+
+/**
+ * List the user-ids of every currently-active landlord or tenant. Used to
+ * fan-out an `app_update` notification when a new APK release is published
+ * by the admin. Excludes admins (who deployed the update themselves) and any
+ * pending/frozen/deleted accounts.
+ */
+export async function listActiveLandlordAndTenantIds(): Promise<number[]> {
+  const db = await requireDb();
+  const rows = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(
+      and(
+        or(eq(users.role, "landlord"), eq(users.role, "tenant")),
+        eq(users.status, "active"),
+      ),
+    );
+  return rows.map((r) => Number(r.id));
+}
+
 // ============================================================
 // RESET TOKENS
 // ============================================================

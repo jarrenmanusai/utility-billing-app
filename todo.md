@@ -245,3 +245,17 @@
 - [x] Tenant bill detail gains "Download / share receipt" button
 - [x] Landlord bill detail also gains the same button (symmetric capability)
 - [x] Bump version to 1.3.6
+
+## User Feedback — Round 23 (Admin APK deploy + in-app update prompts)
+- [x] Server: extend `admin.releases.publish` to fan out an `app_update` notification to every active landlord and tenant on publish
+- [x] Server: add `admin.releases.deploy` convenience that uploads-then-publishes-then-notifies in one mutation
+- [x] Server: helper `listActiveLandlordAndTenantIds` for the fan-out target list (excludes admins, pending, frozen, deleted)
+- [x] Server: bump `/api/upload` size limit from 25 MB to 100 MB so APKs fit
+- [x] Client: new `lib/upload-file.ts` for generic file pick + upload (uses `expo-document-picker` on native, hidden `<input type=file>` on web)
+- [x] Admin Releases tab redesigned as "App updates": dashed dropzone for APK pick, auto-fill of APK URL after upload, version + notes fields, single Deploy button with confirm + success toast announcing notified user count
+- [x] `NotificationRow` deep-links `app_update` notifications to `/get-app` and uses the download icon
+- [x] Persistent `UpdateBanner` mounted globally in `app/_layout.tsx`: polls `public.liveRelease` every 60s, shows pill-shaped CTA when server version > installed `APP_VERSION`, opens APK URL via `Linking.openURL` on Android, falls back to `/get-app` elsewhere, supports per-version dismissal via AsyncStorage, and stays out of `/login`/`/register`/`/reset`/`/get-app` to avoid double UI
+- [x] `/get-app` shows current installed version, "UPDATE" pill when newer, "You already have the latest" reassurance when not, and a non-Android-only hint
+- [x] New vitest `tests/update-banner.test.ts` guards the semver compare logic that decides when to show the banner
+- [x] Bump version to 1.4.0 (significant feature)
+- [x] 48/48 tests pass, typecheck clean
