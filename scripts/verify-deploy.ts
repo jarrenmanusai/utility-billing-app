@@ -133,6 +133,19 @@ async function checkVersionFiles() {
     );
   }
   ok(`app.config.ts version matches (${m2[1]})`);
+
+  // package.json version — used by the Manus Publish Mobile App card and by
+  // EAS Build as the Android versionName / iOS CFBundleShortVersionString.
+  const pkg = await fs.readFile("package.json", "utf-8");
+  const pkgJson = JSON.parse(pkg) as { version?: string };
+  if (!pkgJson.version) return fail("package.json version readable", "missing version field");
+  if (pkgJson.version !== appVer) {
+    return fail(
+      "package.json version agrees",
+      `package.json=${pkgJson.version}  ≠  APP_VERSION=${appVer} — bump in lock-step (this is what the Publish card shows)`,
+    );
+  }
+  ok(`package.json version matches (${pkgJson.version})`);
 }
 
 async function main() {
