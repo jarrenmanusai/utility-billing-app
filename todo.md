@@ -291,3 +291,10 @@
 - [x] Time-to-submit floor: <1.5s submissions rejected
 - [x] "New question" refresh button + auto-refresh on failed submit
 - [x] 7 captcha unit tests (73 total passing)
+
+## User Feedback — Round 27 (2026-05-26)
+- [x] Add MANUS_HANDOFF.txt at repo root with end-to-end instructions for the next agent
+- [x] Document JDK 21 + Gradle 8.13 + AGP 8.8 + Kotlin 2.0.21 + minSdk 24 toolchain
+- [x] Spell out native Android build path (EAS image: ubuntu-22.04-jdk-21-ndk-r27b)
+- [x] Confirm "no web app" deploy hard-constraint
+- [x] Document drizzle migrations (0000..0002) + verification SQL
