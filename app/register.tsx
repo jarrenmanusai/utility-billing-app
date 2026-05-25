@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
 
@@ -7,16 +7,42 @@ import { Button, Card, ScreenHeader, TextField } from "@/components/ui/primitive
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
+import {
+  checkEmail,
+  formatPhPhoneInput,
+  isValidPhPhone,
+  normalizePhPhone,
+} from "@/lib/validation";
 
 export default function RegisterScreen() {
   const colors = useColors();
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
+
+  // Live per-field validation hints. We compute these every render so the
+  // user gets immediate feedback as they type — but we only show them once
+  // they've actually entered something (no "required" yelling at empty
+  // fields the moment the screen mounts).
+  const emailHint = useMemo(() => {
+    if (!email.trim()) return null;
+    const result = checkEmail(email);
+    return result.ok ? null : result.reason;
+  }, [email]);
+
+  const phoneHint = useMemo(() => {
+    if (!phone.trim()) return null;
+    return isValidPhPhone(phone)
+      ? null
+      : "Enter a PH mobile number starting with +63 or 09 (e.g. +63 917 555 1234).";
+  }, [phone]);
+
+  const phonePreview = useMemo(() => normalizePhPhone(phone), [phone]);
 
   const register = trpc.auth.register.useMutation({
     onSuccess: (_data, vars) => {
@@ -27,8 +53,20 @@ export default function RegisterScreen() {
 
   const submit = () => {
     setError(null);
-    if (!email || !name || !password) {
+    if (!email || !name || !phone || !password) {
       setError("Please fill in all fields.");
+      return;
+    }
+    const emailCheck = checkEmail(email);
+    if (!emailCheck.ok || !emailCheck.normalized) {
+      setError(emailCheck.reason ?? "Please enter a valid email address.");
+      return;
+    }
+    const normalizedPhone = normalizePhPhone(phone);
+    if (!normalizedPhone) {
+      setError(
+        "Please enter a valid Philippine mobile number starting with +63 or 09 (e.g. +63 917 555 1234).",
+      );
       return;
     }
     if (password.length < 8) {
@@ -39,7 +77,12 @@ export default function RegisterScreen() {
       setError("Passwords do not match.");
       return;
     }
-    register.mutate({ email: email.trim().toLowerCase(), name: name.trim(), password });
+    register.mutate({
+      email: emailCheck.normalized,
+      name: name.trim(),
+      phone: normalizedPhone,
+      password,
+    });
   };
 
   // Success state: account submitted, awaiting admin approval
@@ -116,15 +159,42 @@ export default function RegisterScreen() {
             onChangeText={setName}
             autoCapitalize="words"
           />
-          <TextField
-            label="Email"
-            placeholder="you@example.com"
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-            value={email}
-            onChangeText={setEmail}
-          />
+          <View>
+            <TextField
+              label="Email"
+              placeholder="you@example.com"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              value={email}
+              onChangeText={setEmail}
+            />
+            {emailHint ? (
+              <Text className="text-xs text-error mt-1">{emailHint}</Text>
+            ) : null}
+          </View>
+          <View>
+            <TextField
+              label="Mobile number (PH)"
+              placeholder="+63 917 555 1234 or 0917 555 1234"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="phone-pad"
+              value={phone}
+              onChangeText={(text) => setPhone(formatPhPhoneInput(text))}
+            />
+            {phoneHint ? (
+              <Text className="text-xs text-error mt-1">{phoneHint}</Text>
+            ) : phonePreview ? (
+              <Text className="text-xs text-success mt-1">
+                Will be saved as {phonePreview}
+              </Text>
+            ) : (
+              <Text className="text-xs text-muted mt-1">
+                Must start with +63 or 09 and be a real Philippine mobile number.
+              </Text>
+            )}
+          </View>
           <TextField
             label="Password"
             placeholder="At least 8 characters"

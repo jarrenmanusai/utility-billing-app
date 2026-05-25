@@ -20,6 +20,7 @@ import {
   verifyPassword,
 } from "./auth";
 import { invokeLLM } from "./_core/llm";
+import { checkEmail, normalizePhPhone } from "../lib/validation";
 
 // ---------- helpers ----------
 
@@ -44,14 +45,46 @@ const authRouter = router({
   register: publicProcedure
     .input(
       z.object({
-        email: z.string().email(),
+        // The client-side form does the heavy validation; we still apply the
+        // shared validators here defensively so a hand-crafted request can't
+        // bypass them.
+        email: z.string().min(3).max(320),
         password: z.string().min(8).max(128),
         name: z.string().min(1).max(120),
+        // Accept any non-empty string; we normalise + validate manually below
+        // so we can return a *specific* error instead of zod's generic one.
+        phone: z.string().min(1).max(40),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const email = input.email.toLowerCase();
       const ip = getClientIp(ctx.req);
+
+      // ---- Email: enforce "looks legit" rules (see lib/validation.ts) ----
+      const emailCheck = checkEmail(input.email);
+      if (!emailCheck.ok || !emailCheck.normalized) {
+        await db.logAuthAttempt({
+          email: input.email.toLowerCase(),
+          ip,
+          success: false,
+          action: "register",
+        });
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: emailCheck.reason ?? "Invalid email address.",
+        });
+      }
+      const email = emailCheck.normalized;
+
+      // ---- Phone: must be a valid PH mobile number; normalise to E.164 ----
+      const phone = normalizePhPhone(input.phone);
+      if (!phone) {
+        await db.logAuthAttempt({ email, ip, success: false, action: "register" });
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Enter a valid Philippine mobile number starting with +63 or 09 (e.g. +63 917 555 1234).",
+        });
+      }
 
       // Anti-spam: blocked domain?
       if (await db.isDomainBlocked(emailDomain(email))) {
@@ -70,11 +103,22 @@ const authRouter = router({
         });
       }
 
-      // Existing user?
+      // Existing user (by email)?
       const existing = await db.getUserByEmail(email);
       if (existing) {
         await db.logAuthAttempt({ email, ip, success: false, action: "register" });
         throw new TRPCError({ code: "CONFLICT", message: "Email already registered." });
+      }
+
+      // Existing user by phone? Reuse of one mobile across multiple accounts
+      // is a common spam vector and also breaks SMS reset flows we may add.
+      const existingPhone = await db.getUserByPhone(phone);
+      if (existingPhone) {
+        await db.logAuthAttempt({ email, ip, success: false, action: "register" });
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "That phone number is already registered.",
+        });
       }
 
       const passwordHash = await hashPassword(input.password);
@@ -82,6 +126,7 @@ const authRouter = router({
         email,
         passwordHash,
         name: input.name,
+        phone,
         role: "landlord",
         status: "pending",
         loginMethod: "password",

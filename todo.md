@@ -275,3 +275,11 @@
 - [x] Bill receipt: payment proof images also expandable with the same UX
 - [x] Added "Tap to view full image" hint under meter photo + expand glyph overlay on each thumbnail
 - [x] Bump version to 1.4.2
+
+## User Feedback — Round 25 (2026-05-26 — v1.5.0)
+- [x] Add PH phone number field to landlord registration (must start with +63 or 09, real PH mobile)
+- [x] Add stricter "legitimate email" validation (rejects malformed addresses, common TLD typos, disposable inboxes)
+- [x] Live per-field hints + canonicalization preview ("Will be saved as +639175551234")
+- [x] Server-side enforcement (defence in depth) + duplicate-phone check
+- [x] Add `phone` column to `users` (drizzle migration 0002)
+- [x] Unit tests for validators (18 new tests, 66 total passing)

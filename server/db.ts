@@ -134,6 +134,18 @@ export async function getUserByEmail(email: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+/** Look up a user by their canonical E.164 phone number (e.g. +639175551234). */
+export async function getUserByPhone(phone: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select()
+    .from(users)
+    .where(eq(users.phone, phone))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
 export async function createUser(data: InsertUser): Promise<number> {
   const db = await requireDb();
   if (data.email) data.email = data.email.toLowerCase();

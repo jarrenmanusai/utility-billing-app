@@ -23,6 +23,11 @@ export const users = mysqlTable("users", {
   passwordHash: varchar("passwordHash", { length: 255 }),
   name: text("name"),
   loginMethod: varchar("loginMethod", { length: 64 }),
+  /**
+   * Philippine mobile number, normalised to E.164 (+63XXXXXXXXXX, 13 chars).
+   * Required at landlord registration; optional for tenants/admin (NULL).
+   */
+  phone: varchar("phone", { length: 20 }),
   /** Role determines the home screen and permissions. */
   role: mysqlEnum("role", ["landlord", "tenant", "admin"]).default("landlord").notNull(),
   /** Status: pending = awaiting admin approval, active = approved, frozen = blocked, deleted = soft-deleted. */
