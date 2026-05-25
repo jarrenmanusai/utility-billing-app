@@ -542,6 +542,12 @@ const landlordRouter = router({
       await db.markAllNotificationsRead(ctx.user!.id);
       return { ok: true };
     }),
+    markOneRead: landlordProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await db.markNotificationRead(ctx.user!.id, input.id);
+        return { ok: true };
+      }),
   }),
 
   stats: landlordProcedure.query(async ({ ctx }) => {
@@ -671,6 +677,12 @@ const tenantRouter = router({
       await db.markAllNotificationsRead(ctx.user!.id);
       return { ok: true };
     }),
+    markOneRead: tenantProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await db.markNotificationRead(ctx.user!.id, input.id);
+        return { ok: true };
+      }),
   }),
 });
 

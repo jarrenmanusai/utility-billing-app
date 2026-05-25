@@ -430,6 +430,24 @@ export async function markAllNotificationsRead(userId: number) {
     .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
 }
 
+/**
+ * Mark a single notification as read. Owner-scoped: only the recipient can
+ * mark their own notifications. Idempotent — calling twice is a no-op.
+ */
+export async function markNotificationRead(userId: number, id: number) {
+  const db = await requireDb();
+  await db
+    .update(notifications)
+    .set({ readAt: new Date() })
+    .where(
+      and(
+        eq(notifications.id, id),
+        eq(notifications.userId, userId),
+        isNull(notifications.readAt),
+      ),
+    );
+}
+
 // ============================================================
 // AUTH LOGS / BLOCKLIST / SETTINGS
 // ============================================================

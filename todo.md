@@ -226,3 +226,13 @@
 - [x] Tolerate quoted *and* unquoted `name=` and `filename=` parameters
 - [x] Empty-body and zero-part diagnostic logs added so future failures are debuggable
 - [x] Bump version to 1.3.4
+
+## User Feedback — Round 21 (Notification deep-links + per-row mark-read)
+- [x] Server: added owner-scoped `notifications.markOneRead({ id })` mutation for both landlord and tenant routers, plus `db.markNotificationRead(userId, id)` helper
+- [x] Built shared `NotificationRow` component that decodes the JSON `payload` and routes by type — chat_message → `/landlord/chat/[id]` or `/tenant?tab=chat`, bill_deployed/payment_verified → `/tenant/bills/[id]`, payment_uploaded → `/landlord/bills/[id]`
+- [x] Added a dedicated checkmark button on each unread row that marks just that one alert read (independent of the bulk action)
+- [x] Tapping a row auto-marks-read AND deep-links in one motion
+- [x] Removed the always-on auto-mark-read effect on the landlord screen so unread state is now meaningful
+- [x] Optimistic update so the blue dot disappears instantly
+- [x] Helper hint: "Tap any alert to open it, or use the checkmark to clear."
+- [x] Bump version to 1.3.5

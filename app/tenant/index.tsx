@@ -11,6 +11,7 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
 import { formatPHP, formatDate, formatBillPeriod, relativeTime } from "@/lib/format";
 import { useToast } from "@/components/feedback";
+import { NotificationRow } from "@/components/notification-row";
 
 type TabKey = "bills" | "chat" | "notif" | "profile";
 
@@ -163,12 +164,32 @@ function NotifTab() {
   const markAll = trpc.tenant.notifications.markAllRead.useMutation({
     onSuccess: () => utils.tenant.notifications.list.invalidate(),
   });
+  // Per-row mark-read with optimistic clear so the blue dot disappears
+  // immediately even before the network round-trip completes.
+  const markOne = trpc.tenant.notifications.markOneRead.useMutation({
+    onMutate: async ({ id }) => {
+      await utils.tenant.notifications.list.cancel();
+      const prev = utils.tenant.notifications.list.getData();
+      if (prev) {
+        utils.tenant.notifications.list.setData(
+          undefined,
+          prev.map((n) => (n.id === id ? { ...n, readAt: new Date() } : n)),
+        );
+      }
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) utils.tenant.notifications.list.setData(undefined, ctx.prev);
+    },
+    onSettled: () => utils.tenant.notifications.list.invalidate(),
+  });
+  const hasUnread = (list.data ?? []).some((n) => !n.readAt);
 
   return (
     <View style={{ flex: 1 }}>
       <View className="flex-row items-center justify-between px-4 py-3">
         <Text className="text-xl font-bold text-foreground">Alerts</Text>
-        {list.data && list.data.length > 0 ? (
+        {hasUnread ? (
           <Button title="Mark all read" variant="secondary" onPress={() => markAll.mutate()} loading={markAll.isPending} />
         ) : null}
       </View>
@@ -181,16 +202,11 @@ function NotifTab() {
           <EmptyState icon="bell.fill" title="No alerts" body="New bills and updates will show up here." />
         }
         renderItem={({ item }) => (
-          <Card>
-            <View className="flex-row items-start gap-3">
-              <View className="w-2 h-2 rounded-full mt-2" style={{ backgroundColor: item.readAt ? "transparent" : "#0a7ea4" }} />
-              <View className="flex-1">
-                <Text className="text-sm font-semibold text-foreground">{item.title}</Text>
-                {item.body ? <Text className="text-sm text-muted mt-0.5">{item.body}</Text> : null}
-                <Text className="text-xs text-muted mt-1">{relativeTime(item.createdAt)}</Text>
-              </View>
-            </View>
-          </Card>
+          <NotificationRow
+            item={item}
+            role="tenant"
+            onMarkRead={(id) => markOne.mutate({ id })}
+          />
         )}
       />
     </View>

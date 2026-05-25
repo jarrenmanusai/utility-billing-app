@@ -33,6 +33,7 @@ const MAPPING = {
   "pencil": "edit",
   "checkmark": "check",
   "checkmark.circle.fill": "check-circle",
+  "checkmark.seal.fill": "verified",
   "xmark": "close",
   "xmark.circle.fill": "cancel",
   "arrow.right": "arrow-forward",
