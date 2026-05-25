@@ -14,6 +14,24 @@ import {
   type DateSuggestion,
 } from "@/lib/date-parse";
 
+// Local lookup for the explicit-past-date detector below. Mirrors the table
+// in lib/date-parse.ts; kept here to avoid widening the public module API just
+// for the picker's UX-level error categorisation.
+const MONTH_LOOKUP: Record<string, number> = {
+  jan: 0, january: 0,
+  feb: 1, february: 1,
+  mar: 2, march: 2,
+  apr: 3, april: 3,
+  may: 4,
+  jun: 5, june: 5,
+  jul: 6, july: 6,
+  aug: 7, august: 7,
+  sep: 8, sept: 8, september: 8,
+  oct: 9, october: 9,
+  nov: 10, november: 10,
+  dec: 11, december: 11,
+};
+
 /**
  * Smart due-date input.
  *
@@ -103,12 +121,66 @@ export function DueDatePicker({
     const [y, m, d] = v.split("-").map((s) => parseInt(s, 10));
     if (!y || !m || !d) return;
     const date = new Date(y, m - 1, d);
+    // Hard floor: never accept a past date even if browser-min was bypassed.
+    const today = new Date();
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    if (date < todayStart) return;
     setText(formatLongDate(date));
     onChange(toIsoDate(date));
   };
 
   const initialPickerDate = parsed?.date ?? new Date();
   const showSuggestions = focused && suggestions.length > 0;
+
+  // Today (start-of-day) as the minimum allowed due date — used by both the
+  // native picker (iOS/Android `minimumDate`) and the web HTML5 input (`min`).
+  const todayMin = new Date();
+  todayMin.setHours(0, 0, 0, 0);
+  const todayMinIso = toIsoDate(todayMin);
+
+  // The text-typed value is in the past: distinct from a parser failure.
+  // We compute this so the inline error is specific ("That date is in the past")
+  // rather than the generic "Couldn't read that date".
+  const trimmedText = text.trim();
+  const isExplicitPast = (() => {
+    if (!trimmedText || parsed) return false;
+    // Try a permissive re-parse that ignores the future-only check, just to
+    // see if the user typed a structurally-valid past date.
+    const isoFull = trimmedText.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (isoFull) {
+      const y = parseInt(isoFull[1], 10);
+      const m = parseInt(isoFull[2], 10) - 1;
+      const d = parseInt(isoFull[3], 10);
+      if (Number.isFinite(y) && Number.isFinite(m) && Number.isFinite(d)) {
+        const candidate = new Date(y, m, d);
+        return candidate < todayMin;
+      }
+    }
+    const num = trimmedText.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+    if (num) {
+      const y = parseInt(num[3], 10);
+      // 2-digit years that are clearly past (e.g. "01" → 2001) trigger this branch
+      const fullYear = num[3].length === 2 ? (y > 70 ? 1900 + y : 2000 + y) : y;
+      const month = parseInt(num[1], 10) - 1;
+      const day = parseInt(num[2], 10);
+      if (Number.isFinite(fullYear) && Number.isFinite(month) && Number.isFinite(day)) {
+        const candidate = new Date(fullYear, month, day);
+        if (!isNaN(candidate.getTime())) return candidate < todayMin;
+      }
+    }
+    const named = trimmedText.toLowerCase().match(/^([a-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?[,\s]+(\d{2,4})$/);
+    if (named) {
+      const m = MONTH_LOOKUP[named[1]];
+      const d = parseInt(named[2], 10);
+      const y = parseInt(named[3], 10);
+      const fullYear = named[3].length === 2 ? (y > 70 ? 1900 + y : 2000 + y) : y;
+      if (m !== undefined && Number.isFinite(d) && Number.isFinite(fullYear)) {
+        const candidate = new Date(fullYear, m, d);
+        if (!isNaN(candidate.getTime())) return candidate < todayMin;
+      }
+    }
+    return false;
+  })();
 
   return (
     <View>
@@ -165,8 +237,10 @@ export function DueDatePicker({
             // A REAL HTML5 date input stretched to fill the button.
             // Transparent but on-screen and pointer-event-eligible so clicking ANYWHERE
             // in the 48x48 button (including padding) opens the date picker.
+            // `min` enforces today as the lower bound so the browser hides past dates.
             (require("react").createElement("input", {
               type: "date",
+              min: todayMinIso,
               value: parsed ? toIsoDate(parsed.date) : "",
               onChange: handleWebInputChange,
               "aria-label": "Open calendar picker",
@@ -271,7 +345,9 @@ export function DueDatePicker({
           </View>
         ) : suggestions.length === 0 ? (
           <Text style={{ marginTop: 6, color: colors.error, fontSize: 12 }}>
-            Couldn&apos;t read that date. Try &quot;May 30&quot; or &quot;05/30&quot;.
+            {isExplicitPast
+              ? "That date is in the past. Pick today or a future date."
+              : "Couldn't read that date. Try \"May 30\" or \"05/30\"."}
           </Text>
         ) : null
       ) : null}
@@ -289,7 +365,8 @@ export function DueDatePicker({
                   <DateTimePicker
                     mode="date"
                     display="spinner"
-                    value={initialPickerDate}
+                    value={initialPickerDate >= todayMin ? initialPickerDate : todayMin}
+                    minimumDate={todayMin}
                     onChange={handlePickerChange}
                   />
                   <Button title="Done" onPress={() => setPickerOpen(false)} />
@@ -298,7 +375,12 @@ export function DueDatePicker({
             </Pressable>
           </Modal>
         ) : (
-          <DateTimePicker mode="date" value={initialPickerDate} onChange={handlePickerChange} />
+          <DateTimePicker
+            mode="date"
+            value={initialPickerDate >= todayMin ? initialPickerDate : todayMin}
+            minimumDate={todayMin}
+            onChange={handlePickerChange}
+          />
         )
       ) : null}
     </View>

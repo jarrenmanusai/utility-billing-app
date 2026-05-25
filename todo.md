@@ -171,3 +171,14 @@
 - [x] Visual: monospaced/receipt-feel layout — landlord name on top, tenant below, period, line-by-line items with consumption/rate/amount, divider, total, paid/unpaid badge, due date, optional notes, payment proof image
 - [x] Server detail endpoints now return both landlord & tenant info plus enriched utility for line items
 - [x] Bump version to 1.2.0
+
+## User Feedback — Round 15 (Past-date guardrails for Due Date)
+- [x] Reject any explicitly-typed past date (e.g. "01/01/2020", "6/15/01", "2025-12-31") with a specific "That date is in the past" error
+- [x] Smarter 2-digit year normalization: "26" → 2026 stays current-century, but values that would land >5 years in the past trip the past-rejection rule
+- [x] All inferred-year fallbacks (MM/DD, "May 30") roll forward strictly after today
+- [x] Native iOS/Android picker uses `minimumDate={today}` so the user can't even scroll to past dates
+- [x] Web HTML5 `<input type="date">` uses `min={today}` so browsers grey out past days
+- [x] Defense-in-depth: `handleWebInputChange` re-checks the value against today and silently rejects
+- [x] All `suggestDates` outputs guaranteed to be today-or-later
+- [x] Vitest expanded to 26 date-parse tests (44 total)
+- [x] Bump version to 1.2.1

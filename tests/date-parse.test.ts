@@ -38,10 +38,16 @@ describe("parseDueDate", () => {
     expect(toIsoDate(r.date)).toBe("2027-12-25");
   });
 
-  it("does NOT roll forward when year is explicit even if past", () => {
-    const r = parseDueDate("01/01/2020", TODAY)!;
-    expect(toIsoDate(r.date)).toBe("2020-01-01");
-    expect(r.yearWasInferred).toBe(false);
+  it("rejects explicit past dates (no due date can be in the past)", () => {
+    expect(parseDueDate("01/01/2020", TODAY)).toBeNull();
+    expect(parseDueDate("6/15/01", TODAY)).toBeNull(); // would be 2001 — reject
+    expect(parseDueDate("December 31, 2025", TODAY)).toBeNull(); // before May 23, 2026
+    expect(parseDueDate("2025-12-31", TODAY)).toBeNull(); // ISO past — reject
+  });
+
+  it("accepts today as the due date (lower bound is inclusive)", () => {
+    const r = parseDueDate("2026-05-23", TODAY)!;
+    expect(toIsoDate(r.date)).toBe("2026-05-23");
   });
 
   it("parses 'May 30' month-name form", () => {

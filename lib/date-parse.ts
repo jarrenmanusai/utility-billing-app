@@ -2,18 +2,27 @@
  * Smart date parser for the New Bill due-date field.
  *
  * Accepts a wide range of input formats commonly used in the Philippines and
- * returns a fully-resolved JS Date (or null if unparseable).
+ * returns a fully-resolved JS Date (or null if unparseable / in the past).
  *
- * Rules:
- *   - "05/30" / "5/30" / "5-30"           -> MM/DD with current year
- *   - "May 30" / "may 30" / "May 30th"    -> Month name + day, current year
- *   - "05/30/26" / "5/30/2026"            -> MM/DD/YY or MM/DD/YYYY
- *                                            (2-digit year always assumed 2000s)
- *   - "2026-06-05" / ISO                  -> Parsed as-is
- *   - If the resulting date is in the past (relative to `today`), and the year
- *     was inferred (not explicit), roll forward to next year. This means a
- *     landlord typing "May 30" on June 1st gets May 30, 2027 — the natural
- *     reading of "next May".
+ * Hard rule (added v1.2.1): the parsed date MUST be today or later. There is
+ * no use case in this app for a "past" due date — any year that falls before
+ * the current year is treated as a typo, not a valid input. This prevents the
+ * "issued May 2026, due June 2001" disaster.
+ *
+ * Behavior matrix:
+ *   - "05/30" / "5/30" / "5-30"           -> MM/DD with current year, rolled
+ *                                            to next year if already past
+ *   - "May 30" / "may 30" / "May 30th"    -> Month name + day, current year,
+ *                                            rolled to next year if past
+ *   - "05/30/26" / "5/30/2026"            -> MM/DD/YY or MM/DD/YYYY.
+ *                                            2-digit years pick the nearest
+ *                                            century that lands in the future
+ *                                            (or current). "26" -> 2026,
+ *                                            "01" -> rejected (would be 2001
+ *                                            or 2101, both nonsensical for
+ *                                            the user's intent).
+ *   - "2026-06-05" / ISO                  -> Parsed as-is, rejected if past.
+ *   - Any explicit year strictly before today's year -> rejected (returns null).
  *
  * Returns `{ date, yearWasInferred }` so the caller can show the user which
  * pieces of information were filled in for them.
@@ -40,15 +49,35 @@ const MONTH_NAMES: Record<string, number> = {
 };
 
 /**
- * Normalize a 2-digit year to a 4-digit year in the 2000s.
- * "26" -> 2026, "99" -> 2099 (we never go back to the 1900s in this app).
+ * Normalize a 2-digit year using a sliding window:
+ *   - If the 2-digit value is within (today.year mod 100) + 5, treat as 2000s.
+ *   - Otherwise treat as 1900s (effectively rejecting it as past).
+ *
+ * Concretely, in 2026:
+ *   "26" -> 2026   "27"..."31" -> 2027..2031 (within 5y future)
+ *   "30" -> 2030
+ *   "99" -> 1999 (rejected as past upstream)
+ *   "01" -> 2001 (rejected as past upstream — user clearly mistyped)
+ *
+ * We DO NOT silently bump "01" to 2101 because that's never what a landlord
+ * means when typing a due date. Better to reject and prompt.
  */
-function normalizeYear(yearStr: string): number {
+function normalizeYear(yearStr: string, today: Date): number {
   const n = parseInt(yearStr, 10);
-  if (yearStr.length === 2) return 2000 + n;
+  if (!Number.isFinite(n)) return NaN;
   if (yearStr.length === 4) return n;
-  // 3-digit or weird length — reject
-  return NaN;
+  if (yearStr.length !== 2) return NaN;
+
+  const currentYY = today.getFullYear() % 100;
+  const currentCentury = Math.floor(today.getFullYear() / 100) * 100;
+  // 2-digit year is treated as 2000s if it's within 5 years past or 50 years future
+  // (giving the user generous leeway for typing "26", "27", etc.).
+  // Otherwise it goes to the previous century — which will then be rejected as past.
+  const sameCenturyDiff = n - currentYY;
+  if (sameCenturyDiff >= -5 && sameCenturyDiff <= 50) {
+    return currentCentury + n;
+  }
+  return currentCentury - 100 + n;
 }
 
 function isValidDate(year: number, month: number, day: number): boolean {
@@ -57,6 +86,18 @@ function isValidDate(year: number, month: number, day: number): boolean {
   if (day < 1 || day > 31) return false;
   const d = new Date(year, month, day);
   return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day;
+}
+
+function startOfDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+/**
+ * Reject any candidate that falls before today. This is the single
+ * checkpoint guaranteeing no past dates ever exit this module.
+ */
+function ensureFuture(date: Date, today: Date): Date | null {
+  return date >= startOfDay(today) ? date : null;
 }
 
 export function parseDueDate(
@@ -74,7 +115,10 @@ export function parseDueDate(
     const month = parseInt(isoMatch[2], 10) - 1;
     const day = parseInt(isoMatch[3], 10);
     if (!isValidDate(year, month, day)) return null;
-    return { date: new Date(year, month, day), yearWasInferred: false };
+    const candidate = new Date(year, month, day);
+    const safe = ensureFuture(candidate, today);
+    if (!safe) return null;
+    return { date: safe, yearWasInferred: false };
   }
 
   // 2) Month name + day (e.g. "May 30", "May 30, 2026", "May 30th")
@@ -85,14 +129,17 @@ export function parseDueDate(
     const monthIdx = MONTH_NAMES[monthName];
     if (monthIdx === undefined) return null;
     if (nameMatch[3]) {
-      const year = normalizeYear(nameMatch[3]);
+      const year = normalizeYear(nameMatch[3], today);
       if (!isValidDate(year, monthIdx, day)) return null;
-      return { date: new Date(year, monthIdx, day), yearWasInferred: false };
+      const candidate = new Date(year, monthIdx, day);
+      const safe = ensureFuture(candidate, today);
+      if (!safe) return null;
+      return { date: safe, yearWasInferred: false };
     }
     // No year — use current year, roll forward if past
     const currentYear = today.getFullYear();
-    let candidate = new Date(currentYear, monthIdx, day);
     if (!isValidDate(currentYear, monthIdx, day)) return null;
+    let candidate = new Date(currentYear, monthIdx, day);
     if (candidate < startOfDay(today)) {
       candidate = new Date(currentYear + 1, monthIdx, day);
     }
@@ -105,9 +152,12 @@ export function parseDueDate(
     const month = parseInt(numMatch[1], 10) - 1;
     const day = parseInt(numMatch[2], 10);
     if (numMatch[3]) {
-      const year = normalizeYear(numMatch[3]);
+      const year = normalizeYear(numMatch[3], today);
       if (!isValidDate(year, month, day)) return null;
-      return { date: new Date(year, month, day), yearWasInferred: false };
+      const candidate = new Date(year, month, day);
+      const safe = ensureFuture(candidate, today);
+      if (!safe) return null;
+      return { date: safe, yearWasInferred: false };
     }
     const currentYear = today.getFullYear();
     if (!isValidDate(currentYear, month, day)) return null;
@@ -119,10 +169,6 @@ export function parseDueDate(
   }
 
   return null;
-}
-
-function startOfDay(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
 /**
@@ -161,20 +207,8 @@ export function formatLongDate(date: Date): string {
 /**
  * Build up to 3 autofill suggestions for a vague typed input.
  *
- * Heuristics:
- *   - Only a month name (e.g. "May", "Jun"):
- *       -> [1st, 15th, last day] of that month, current year
- *         (rolled forward if the whole month has already passed)
- *   - Only a 1–2 digit number (e.g. "5" or "30"):
- *       -> interpreted as a DAY in the current month (and next 2 months)
- *         if the number is 1..31. So typing "30" gives:
- *           "May 30, 2026", "June 30, 2026", "July 30, 2026"
- *         (skipping months where that day is invalid, e.g. Feb 30)
- *   - Anything that already parses fully via `parseDueDate` returns [].
- *
- * Returns an array of { label, iso, date } — `label` is the user-facing
- * suggestion text (always in "May 23, 2026" format), `iso` is YYYY-MM-DD
- * for storage, `date` is the JS Date.
+ * All suggestions are guaranteed to be today-or-later — the picker should
+ * never offer a past date for a bill that hasn't been issued yet.
  */
 export interface DateSuggestion {
   label: string;
@@ -192,6 +226,7 @@ export function suggestDates(input: string, today: Date = new Date()): DateSugge
   const out: DateSuggestion[] = [];
   const seen = new Set<string>();
   const pushDate = (d: Date) => {
+    if (d < startOfDay(today)) return; // hard guarantee: no past dates
     const iso = toIsoDate(d);
     if (seen.has(iso)) return;
     seen.add(iso);
@@ -204,25 +239,25 @@ export function suggestDates(input: string, today: Date = new Date()): DateSugge
     const monthIdx = MONTH_NAMES[monthOnlyMatch[1]];
     if (monthIdx !== undefined) {
       let year = today.getFullYear();
-      const startOfMonth = new Date(year, monthIdx, 1);
-      // If the entire month has already ended, roll to next year.
       const lastDayCurrentMonth = new Date(year, monthIdx + 1, 0);
       if (lastDayCurrentMonth < startOfDay(today)) {
         year += 1;
       }
-      const firstDay = new Date(year, monthIdx, 1);
-      const fifteenth = new Date(year, monthIdx, 15);
-      const lastDay = new Date(year, monthIdx + 1, 0);
-      // Prefer dates that are still in the future for the inferred year.
-      const candidates = [firstDay, fifteenth, lastDay].filter(
-        (d) => d >= startOfDay(today) || year > today.getFullYear()
-      );
-      // If we filtered everything out (e.g. user typed current month and we're
-      // past the 15th but before month end), include any remaining future dates.
-      const finalCandidates = candidates.length > 0 ? candidates : [firstDay, fifteenth, lastDay];
-      for (const d of finalCandidates.slice(0, 3)) pushDate(d);
-      void startOfMonth; // silence unused
-      return out;
+      const candidates = [
+        new Date(year, monthIdx, 1),
+        new Date(year, monthIdx, 15),
+        new Date(year, monthIdx + 1, 0), // last day
+      ];
+      for (const d of candidates) pushDate(d);
+      // If everything in the current year was already past, advance one more year
+      // (defensive — `lastDayCurrentMonth` already handles this, but explicit).
+      if (out.length === 0) {
+        const nextYear = year + 1;
+        pushDate(new Date(nextYear, monthIdx, 1));
+        pushDate(new Date(nextYear, monthIdx, 15));
+        pushDate(new Date(nextYear, monthIdx + 1, 0));
+      }
+      return out.slice(0, 3);
     }
   }
 
@@ -233,13 +268,10 @@ export function suggestDates(input: string, today: Date = new Date()): DateSugge
     if (day >= 1 && day <= 31) {
       let cursorMonth = today.getMonth();
       let cursorYear = today.getFullYear();
-      // Walk forward up to 6 months to find 3 valid future dates.
       for (let i = 0; i < 6 && out.length < 3; i++) {
         if (isValidDate(cursorYear, cursorMonth, day)) {
           const candidate = new Date(cursorYear, cursorMonth, day);
-          if (candidate >= startOfDay(today)) {
-            pushDate(candidate);
-          }
+          pushDate(candidate); // pushDate already filters past
         }
         cursorMonth += 1;
         if (cursorMonth > 11) {
@@ -263,7 +295,6 @@ export function suggestDates(input: string, today: Date = new Date()): DateSugge
       let year = today.getFullYear();
       const lastDayCurrentMonth = new Date(year, monthIdx + 1, 0);
       if (lastDayCurrentMonth < startOfDay(today)) year += 1;
-      // Suggest the 15th of each candidate month as a reasonable default.
       pushDate(new Date(year, monthIdx, 15));
     }
   }
