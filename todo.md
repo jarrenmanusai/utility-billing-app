@@ -330,3 +330,9 @@
 - [x] PUBLISHING.md — added "Order of operations (matters)" section
 - [x] scripts/check-env-conflicts.ts (pnpm check:env) — pre-flight detector that prints exact override calls
 - [x] verify:deploy — added inline tip pointing at 4b for runtime-injected conflicts
+
+## Redeploy hardening pass 3 (post-1.6.0)
+- [x] pnpm fix:env — emits paste-ready webdev_request_secrets JSON payload
+- [x] simple-git-hooks pre-commit (sandbox-aware skip) — registered via pnpm hooks:install
+- [x] TAGGING.md — release tagging procedure + when-not-to-tag rules
+- [x] MANUS_HANDOFF.txt §0 step 2 — references TAGGING.md

@@ -36,8 +36,8 @@ below is mechanical.
      ONCE — do not start the deploy with gaps.
   2. Clone the repo (URL from §1 of DEPLOY_PREREQUISITES.md). ALWAYS
      check out the LATEST tag (vX.Y.Z). If the repo has zero tags, build
-     from `main` and tag it as the current `constants/app-version.ts`
-     value before proceeding.
+     from `main` and DO NOT tag yet — follow TAGGING.md and only tag
+     AFTER a successful APK install is confirmed.
   3. Use Node 22 + pnpm 9. Install with `pnpm install --frozen-lockfile`.
      This MUST happen before any `pnpm <script>` command (including
      db:push, seed:admin, verify:deploy) — otherwise tsx, drizzle-kit,
