@@ -21,6 +21,7 @@ import {
 } from "./auth";
 import { invokeLLM } from "./_core/llm";
 import { checkEmail, normalizePhPhone } from "../lib/validation";
+import { issueChallenge, verifySubmission } from "../lib/captcha";
 
 // ---------- helpers ----------
 
@@ -41,6 +42,14 @@ const authRouter = router({
   /** Get current user from context (works for both OAuth and JWT). */
   me: publicProcedure.query(({ ctx }) => sanitizeUser(ctx.user)),
 
+  /**
+   * Issue an anti-bot challenge for the registration form. Stateless: the
+   * client receives a signed token + a math question and echoes both back
+   * on submit. See `lib/captcha.ts` for the three layers (math + honeypot
+   * + time-to-submit).
+   */
+  captcha: publicProcedure.query(() => issueChallenge()),
+
   /** Landlord self-registration (creates a pending account). */
   register: publicProcedure
     .input(
@@ -54,10 +63,38 @@ const authRouter = router({
         // Accept any non-empty string; we normalise + validate manually below
         // so we can return a *specific* error instead of zod's generic one.
         phone: z.string().min(1).max(40),
+        // CAPTCHA fields. The math answer + signed challenge token round-trip
+        // through the client; honeypot is the invisible field bots fill.
+        captchaToken: z.string().min(1).max(2000),
+        captchaAnswer: z.string().min(1).max(16),
+        honeypot: z.string().max(200).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const ip = getClientIp(ctx.req);
+
+      // ---- CAPTCHA: math + honeypot + time-to-submit ----
+      const captcha = verifySubmission({
+        token: input.captchaToken,
+        answer: input.captchaAnswer,
+        honeypot: input.honeypot,
+      });
+      if (!captcha.ok) {
+        await db.logAuthAttempt({
+          email: input.email.toLowerCase(),
+          ip,
+          success: false,
+          action: "register",
+        });
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[register] captcha failed kind=${captcha.failureKind} ip=${ip}`,
+        );
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: captcha.reason ?? "Verification failed.",
+        });
+      }
 
       // ---- Email: enforce "looks legit" rules (see lib/validation.ts) ----
       const emailCheck = checkEmail(input.email);

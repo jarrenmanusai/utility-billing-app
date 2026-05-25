@@ -16,6 +16,7 @@ import {
 
 export default function RegisterScreen() {
   const colors = useColors();
+  const utils = trpc.useUtils();
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -24,6 +25,18 @@ export default function RegisterScreen() {
   const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
+
+  // Anti-bot CAPTCHA state. The challenge is fetched on screen mount and
+  // refreshed any time it fails (after a wrong answer or expiry). The
+  // honeypot is an invisible input that bots will dump into; humans don't
+  // see it.
+  const captcha = trpc.auth.captcha.useQuery(undefined, {
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    staleTime: 9 * 60 * 1000, // tokens are valid for 10min
+  });
+  const [captchaAnswer, setCaptchaAnswer] = useState("");
+  const [honeypot, setHoneypot] = useState("");
 
   // Live per-field validation hints. We compute these every render so the
   // user gets immediate feedback as they type — but we only show them once
@@ -48,7 +61,12 @@ export default function RegisterScreen() {
     onSuccess: (_data, vars) => {
       setSubmittedEmail(vars.email);
     },
-    onError: (err) => setError(err.message ?? "Unable to register."),
+    onError: (err) => {
+      setError(err.message ?? "Unable to register.");
+      // Refresh the challenge so the user gets a new question to try.
+      setCaptchaAnswer("");
+      utils.auth.captcha.invalidate();
+    },
   });
 
   const submit = () => {
@@ -77,11 +95,22 @@ export default function RegisterScreen() {
       setError("Passwords do not match.");
       return;
     }
+    if (!captcha.data) {
+      setError("Verification challenge not loaded yet — please wait a moment.");
+      return;
+    }
+    if (!captchaAnswer.trim()) {
+      setError("Please answer the verification question.");
+      return;
+    }
     register.mutate({
       email: emailCheck.normalized,
       name: name.trim(),
       phone: normalizedPhone,
       password,
+      captchaToken: captcha.data.token,
+      captchaAnswer: captchaAnswer.trim(),
+      honeypot,
     });
   };
 
@@ -211,6 +240,71 @@ export default function RegisterScreen() {
             value={confirm}
             onChangeText={setConfirm}
           />
+          {/*
+            CAPTCHA section.
+            - The math question itself is a tRPC query; we render its prompt.
+            - The honeypot field below is positioned offscreen + hidden from
+              accessibility tools so humans never see it. Real bots that scan
+              the DOM and fill every input will trip it.
+          */}
+          <View>
+            <View className="flex-row items-end justify-between">
+              <Text className="text-sm font-semibold text-foreground mb-1">
+                Verification
+              </Text>
+              <Pressable
+                onPress={() => {
+                  setCaptchaAnswer("");
+                  utils.auth.captcha.invalidate();
+                }}
+                hitSlop={6}
+              >
+                <Text className="text-xs text-primary mb-1">New question</Text>
+              </Pressable>
+            </View>
+            <View className="flex-row items-center gap-2">
+              <View className="flex-1 px-4 py-3 rounded-xl bg-surface border border-border">
+                <Text className="text-sm text-foreground">
+                  {captcha.isLoading
+                    ? "Loading…"
+                    : captcha.data?.question ?? "Tap 'New question' to retry"}
+                </Text>
+              </View>
+              <View style={{ width: 100 }}>
+                <TextField
+                  placeholder="Answer"
+                  value={captchaAnswer}
+                  onChangeText={setCaptchaAnswer}
+                  keyboardType="number-pad"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+            </View>
+            <Text className="text-xs text-muted mt-1">
+              Helps us confirm you&apos;re not a bot.
+            </Text>
+          </View>
+          {/*
+            Honeypot. Off-screen + hidden so a human never tabs into it; bots
+            that scan and fill all inputs will populate it and we'll reject
+            the request server-side.
+          */}
+          <View
+            style={{ position: "absolute", left: -9999, top: -9999, opacity: 0 }}
+            pointerEvents="none"
+            accessible={false}
+            importantForAccessibility="no-hide-descendants"
+            aria-hidden
+          >
+            <TextField
+              label="Website (leave blank)"
+              value={honeypot}
+              onChangeText={setHoneypot}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
           {error ? <Text className="text-sm text-error">{error}</Text> : null}
           <View className="mt-2">
             <Button title="Create account" onPress={submit} loading={register.isPending} />

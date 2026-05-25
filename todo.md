@@ -283,3 +283,11 @@
 - [x] Server-side enforcement (defence in depth) + duplicate-phone check
 - [x] Add `phone` column to `users` (drizzle migration 0002)
 - [x] Unit tests for validators (18 new tests, 66 total passing)
+
+## User Feedback — Round 26 (2026-05-26 — v1.6.0)
+- [x] Add server-managed CAPTCHA to landlord registration (no third-party API)
+- [x] Math challenge: server issues "What is X op Y?" via signed HMAC token (10-min TTL)
+- [x] Honeypot field: invisible input rejected if filled
+- [x] Time-to-submit floor: <1.5s submissions rejected
+- [x] "New question" refresh button + auto-refresh on failed submit
+- [x] 7 captcha unit tests (73 total passing)
