@@ -515,6 +515,22 @@ const landlordRouter = router({
           attachmentUrl: input.attachmentUrl ?? null,
           attachmentType: input.attachmentType ?? null,
         });
+        // Notify the tenant on the other end of the conversation so an in-app
+        // bell badge / toast surfaces even if they are not currently on the
+        // chat screen. Body is truncated to keep the notification list scannable.
+        const sender = ctx.user!;
+        const preview = input.body?.trim()
+          ? input.body.trim().slice(0, 80)
+          : input.attachmentUrl
+            ? "📎 Sent an attachment"
+            : "New message";
+        await db.createNotification({
+          userId: c.tenantId,
+          type: "chat_message",
+          title: sender.name ? `Message from ${sender.name}` : "New message from your landlord",
+          body: preview,
+          payload: JSON.stringify({ conversationId: input.conversationId }),
+        });
         return { ok: true };
       }),
   }),
@@ -630,6 +646,20 @@ const tenantRouter = router({
           body: input.body ?? null,
           attachmentUrl: input.attachmentUrl ?? null,
           attachmentType: input.attachmentType ?? null,
+        });
+        // Notify the landlord on the other end of the conversation.
+        const sender = ctx.user!;
+        const preview = input.body?.trim()
+          ? input.body.trim().slice(0, 80)
+          : input.attachmentUrl
+            ? "📎 Sent an attachment"
+            : "New message";
+        await db.createNotification({
+          userId: c.landlordId,
+          type: "chat_message",
+          title: sender.name ? `Message from ${sender.name}` : "New message from a tenant",
+          body: preview,
+          payload: JSON.stringify({ conversationId: input.conversationId }),
         });
         return { ok: true };
       }),

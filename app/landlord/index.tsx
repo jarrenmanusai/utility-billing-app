@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -19,6 +19,7 @@ import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
 import { formatPHP, formatDate, formatBillPeriod, relativeTime } from "@/lib/format";
+import { useToast } from "@/components/feedback";
 
 type TabKey = "home" | "bills" | "tenants" | "chat" | "profile";
 type BillFilter = "all" | "unpaid" | "paid" | "draft";
@@ -31,14 +32,54 @@ export default function LandlordDashboard() {
   const { user } = useAuth();
   const colors = useColors();
 
-  const notifications = trpc.landlord.notifications.list.useQuery();
+  // Poll every 8s so a new chat-message notification surfaces on the bell
+  // badge even when the landlord is on a different tab. The query is cheap
+  // (limit 100 from a single user-scoped index).
+  const notifications = trpc.landlord.notifications.list.useQuery(undefined, {
+    refetchInterval: 8000,
+    refetchIntervalInBackground: false,
+  });
   const unreadCount = notifications.data?.filter((n) => !n.readAt).length ?? 0;
+  const unreadChatCount =
+    notifications.data?.filter((n) => !n.readAt && n.type === "chat_message").length ?? 0;
+
+  // Foreground toast: when a new chat_message notification arrives that we
+  // haven't surfaced yet, ping the landlord. We track the highest-seen id
+  // in a ref so we only toast on truly-new arrivals (avoids re-toasting
+  // every 8s poll). The very first poll seeds the baseline silently.
+  const toast = useToast();
+  const lastSeenChatNotifId = useRef<number | null>(null);
+  useEffect(() => {
+    if (!notifications.data) return;
+    const chatNotifs = notifications.data.filter((n) => n.type === "chat_message");
+    if (chatNotifs.length === 0) return;
+    const newest = chatNotifs.reduce((acc, n) => (n.id > acc ? n.id : acc), 0);
+    if (lastSeenChatNotifId.current === null) {
+      // First load — seed without toasting historical messages.
+      lastSeenChatNotifId.current = newest;
+      return;
+    }
+    if (newest > lastSeenChatNotifId.current) {
+      const fresh = chatNotifs
+        .filter((n) => n.id > (lastSeenChatNotifId.current ?? 0) && !n.readAt)
+        .sort((a, b) => b.id - a.id)[0];
+      if (fresh && tab !== "chat") {
+        toast(`${fresh.title} — ${fresh.body ?? ""}`.trim(), { variant: "info" });
+      }
+      lastSeenChatNotifId.current = newest;
+    }
+  }, [notifications.data, tab, toast]);
 
   const tabs: DashboardTab[] = [
     { key: "home", label: "Home", icon: "house.fill" },
     { key: "bills", label: "Bills", icon: "doc.text.fill" },
     { key: "tenants", label: "Tenants", icon: "person.2.fill" },
-    { key: "chat", label: "Chat", icon: "bubble.left.and.bubble.right.fill" },
+    {
+      key: "chat",
+      label: "Chat",
+      icon: "bubble.left.and.bubble.right.fill",
+      badge: unreadChatCount,
+    },
     { key: "profile", label: "Profile", icon: "person.fill" },
   ];
 

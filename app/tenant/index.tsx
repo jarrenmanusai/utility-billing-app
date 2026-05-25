@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, Image, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
 
@@ -10,6 +10,7 @@ import { useColors } from "@/hooks/use-colors";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/lib/auth-context";
 import { formatPHP, formatDate, formatBillPeriod, relativeTime } from "@/lib/format";
+import { useToast } from "@/components/feedback";
 
 type TabKey = "bills" | "chat" | "notif" | "profile";
 
@@ -17,12 +18,48 @@ export default function TenantDashboard() {
   const [tab, setTab] = useState<TabKey>("bills");
   const { user } = useAuth();
   const colors = useColors();
-  const notifQuery = trpc.tenant.notifications.list.useQuery();
+  // Poll every 8s so a new chat-message notification surfaces on the bell
+  // badge and chat-tab badge even when the tenant is on a different tab.
+  const notifQuery = trpc.tenant.notifications.list.useQuery(undefined, {
+    refetchInterval: 8000,
+    refetchIntervalInBackground: false,
+  });
   const unread = notifQuery.data?.filter((n) => !n.readAt).length ?? 0;
+  const unreadChat =
+    notifQuery.data?.filter((n) => !n.readAt && n.type === "chat_message").length ?? 0;
+
+  // Foreground toast on truly-new chat messages. Seed silently on first load
+  // so historical alerts don't all toast at once.
+  const toast = useToast();
+  const lastSeenChatNotifId = useRef<number | null>(null);
+  useEffect(() => {
+    if (!notifQuery.data) return;
+    const chatNotifs = notifQuery.data.filter((n) => n.type === "chat_message");
+    if (chatNotifs.length === 0) return;
+    const newest = chatNotifs.reduce((acc, n) => (n.id > acc ? n.id : acc), 0);
+    if (lastSeenChatNotifId.current === null) {
+      lastSeenChatNotifId.current = newest;
+      return;
+    }
+    if (newest > lastSeenChatNotifId.current) {
+      const fresh = chatNotifs
+        .filter((n) => n.id > (lastSeenChatNotifId.current ?? 0) && !n.readAt)
+        .sort((a, b) => b.id - a.id)[0];
+      if (fresh && tab !== "chat") {
+        toast(`${fresh.title} — ${fresh.body ?? ""}`.trim(), { variant: "info" });
+      }
+      lastSeenChatNotifId.current = newest;
+    }
+  }, [notifQuery.data, tab, toast]);
 
   const tabs: DashboardTab[] = [
     { key: "bills", label: "Bills", icon: "doc.text.fill" },
-    { key: "chat", label: "Chat", icon: "bubble.left.and.bubble.right.fill" },
+    {
+      key: "chat",
+      label: "Chat",
+      icon: "bubble.left.and.bubble.right.fill",
+      badge: unreadChat,
+    },
     { key: "notif", label: "Alerts", icon: "bell.fill", badge: unread },
     { key: "profile", label: "Profile", icon: "person.fill" },
   ];

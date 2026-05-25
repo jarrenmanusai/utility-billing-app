@@ -211,3 +211,11 @@
 - [x] Wired into tenant chat (via shared ChatView)
 - [x] Caret-aware emoji insertion + persisted recents (AsyncStorage)
 - [x] Bump version to 1.3.0
+
+## User Feedback — Round 19 (Chat notifications)
+- [x] Server: every chat send (landlord→tenant, tenant→landlord) now writes a `chat_message` notification row for the recipient with title, 80-char body preview (📎 fallback for attachment-only), and `{conversationId}` payload
+- [x] Bell badge auto-refreshes via 8-second polling so unread counts update without manual refresh
+- [x] Dedicated unread-chat count badge on the Chat tab icon (landlord & tenant)
+- [x] Foreground in-app toast banner when a new chat notification arrives and recipient is on a different tab
+- [x] First-load seeding so historical alerts don't all toast on app open
+- [x] Bump version to 1.3.3
