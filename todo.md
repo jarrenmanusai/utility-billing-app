@@ -192,3 +192,12 @@
 - [x] Stat cards show chevron + press feedback (scale 0.98, opacity 0.7) so they read as interactive
 - [x] Empty-state copy adapts to active filter (e.g. "No unpaid bills")
 - [x] Bump version to 1.2.2
+
+## User Feedback — Round 17 (Filter chip redesign)
+- [x] Fix vertical-stretch bug — chips now have fixed `height: 36` and the row container has fixed `height: 52`
+- [x] Compact pill design with icon + label + count badge inline
+- [x] Inline counts: All (n) / Unpaid (n) / Paid (n) / Draft (n) — auto-hidden when zero
+- [x] Inactive state: subtle outlined pill on `surface` background; active state: filled tint with white text + translucent count chip
+- [x] Each chip shows a relevant icon — grid (All), clock (Unpaid), check-circle (Paid), pencil (Draft) — for at-a-glance scanning
+- [x] Light press feedback (opacity 0.75) without scale transforms that could distort the row
+- [x] Bump version to 1.2.3

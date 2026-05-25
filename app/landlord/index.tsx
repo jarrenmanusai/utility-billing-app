@@ -270,32 +270,92 @@ function BillsTab({ filter, onFilterChange }: BillsTabProps) {
     return list;
   }, [bills.data, filter]);
 
-  const FilterChip = ({ k, label }: { k: BillFilter; label: string }) => {
+  // Per-status counts so each chip can show its quantity inline.
+  // Counts come from the same `bills.data` source as the filtered list.
+  const counts = useMemo(() => {
+    const list = bills.data ?? [];
+    return {
+      all: list.length,
+      unpaid: list.filter((b) => b.status === "deployed").length,
+      paid: list.filter((b) => b.status === "paid").length,
+      draft: list.filter((b) => b.status === "draft").length,
+    };
+  }, [bills.data]);
+
+  /**
+   * Compact pill chip: icon + label + count, fixed height so it never
+   * stretches vertically when its parent has flex layout. Active state uses
+   * the brand tint as background; inactive uses a subtle outlined surface.
+   */
+  const FilterChip = ({
+    k,
+    label,
+    icon,
+  }: {
+    k: BillFilter;
+    label: string;
+    icon: React.ComponentProps<typeof IconSymbol>["name"];
+  }) => {
     const active = filter === k;
+    const count = counts[k];
     return (
       <Pressable
         onPress={() => onFilterChange(k)}
+        accessibilityRole="button"
+        accessibilityState={{ selected: active }}
         style={({ pressed }) => [
           {
-            paddingHorizontal: 12,
-            paddingVertical: 6,
-            borderRadius: 999,
+            height: 36,
+            paddingHorizontal: 14,
+            borderRadius: 18,
             borderWidth: 1,
             borderColor: active ? colors.tint : colors.border,
-            backgroundColor: active ? colors.tint : "transparent",
-            opacity: pressed ? 0.7 : 1,
+            backgroundColor: active ? colors.tint : colors.surface,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 6,
+            // Light press feedback only — no transform that could distort the row.
+            opacity: pressed ? 0.75 : 1,
           },
         ]}
       >
+        <IconSymbol
+          name={icon}
+          size={14}
+          color={active ? colors.background : colors.muted}
+        />
         <Text
           style={{
-            fontSize: 12,
+            fontSize: 13,
             fontWeight: "600",
             color: active ? colors.background : colors.text,
           }}
         >
           {label}
         </Text>
+        {count > 0 ? (
+          <View
+            style={{
+              minWidth: 20,
+              height: 18,
+              paddingHorizontal: 6,
+              borderRadius: 9,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: active ? colors.background + "33" : colors.tint + "1A",
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: "700",
+                color: active ? colors.background : colors.tint,
+              }}
+            >
+              {count}
+            </Text>
+          </View>
+        ) : null}
       </Pressable>
     );
   };
@@ -306,16 +366,25 @@ function BillsTab({ filter, onFilterChange }: BillsTabProps) {
         <Text className="text-xl font-bold text-foreground">Bills</Text>
         <Button title="New" icon="plus" onPress={() => router.push("/landlord/bills/new")} />
       </View>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 16, gap: 8, paddingBottom: 8 }}
-      >
-        <FilterChip k="all" label="All" />
-        <FilterChip k="unpaid" label="Unpaid" />
-        <FilterChip k="paid" label="Paid" />
-        <FilterChip k="draft" label="Draft" />
-      </ScrollView>
+      {/* Horizontal filter row — fixed height keeps chips as compact pills.
+          The wrapper is intentionally NOT flex-1 so chips render at their
+          natural row height instead of stretching vertically. */}
+      <View style={{ height: 52, justifyContent: "center" }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            gap: 8,
+            alignItems: "center",
+          }}
+        >
+          <FilterChip k="all" label="All" icon="square.grid.2x2.fill" />
+          <FilterChip k="unpaid" label="Unpaid" icon="clock.fill" />
+          <FilterChip k="paid" label="Paid" icon="checkmark.circle.fill" />
+          <FilterChip k="draft" label="Draft" icon="pencil" />
+        </ScrollView>
+      </View>
       <FlatList
         data={filtered}
         keyExtractor={(b) => String(b.id)}
