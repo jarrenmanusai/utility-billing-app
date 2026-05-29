@@ -1,3 +1,13 @@
+/**
+ * Owner notification transport.
+ *
+ * On Manus: dispatches via Forge notification service.
+ * On Sevalla/other: logs the notification and returns success (no-op).
+ *
+ * Future enhancement: integrate with email/Slack/Discord webhooks via
+ * NOTIFICATION_WEBHOOK_URL env var.
+ */
+
 import { TRPCError } from "@trpc/server";
 import { ENV } from "./env";
 
@@ -53,55 +63,69 @@ const validatePayload = (input: NotificationPayload): NotificationPayload => {
 };
 
 /**
- * Dispatches a project-owner notification through the Manus Notification Service.
- * Returns `true` if the request was accepted, `false` when the upstream service
- * cannot be reached (callers can fall back to email/slack). Validation errors
- * bubble up as TRPC errors so callers can fix the payload.
+ * Dispatches a project-owner notification.
+ *
+ * - If Forge env vars are configured: sends via Manus Notification Service.
+ * - If NOTIFICATION_WEBHOOK_URL is set: sends a POST to that webhook.
+ * - Otherwise: logs the notification and returns true (graceful no-op).
  */
 export async function notifyOwner(payload: NotificationPayload): Promise<boolean> {
   const { title, content } = validatePayload(payload);
 
-  if (!ENV.forgeApiUrl) {
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Notification service URL is not configured.",
-    });
-  }
+  // Path 1: Manus Forge notification service
+  if (ENV.forgeApiUrl && ENV.forgeApiKey) {
+    const endpoint = buildEndpointUrl(ENV.forgeApiUrl);
 
-  if (!ENV.forgeApiKey) {
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Notification service API key is not configured.",
-    });
-  }
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          authorization: `Bearer ${ENV.forgeApiKey}`,
+          "content-type": "application/json",
+          "connect-protocol-version": "1",
+        },
+        body: JSON.stringify({ title, content }),
+      });
 
-  const endpoint = buildEndpointUrl(ENV.forgeApiUrl);
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        console.warn(
+          `[Notification] Failed to notify owner (${response.status} ${response.statusText})${
+            detail ? `: ${detail}` : ""
+          }`,
+        );
+        return false;
+      }
 
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        authorization: `Bearer ${ENV.forgeApiKey}`,
-        "content-type": "application/json",
-        "connect-protocol-version": "1",
-      },
-      body: JSON.stringify({ title, content }),
-    });
-
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      console.warn(
-        `[Notification] Failed to notify owner (${response.status} ${response.statusText})${
-          detail ? `: ${detail}` : ""
-        }`,
-      );
+      return true;
+    } catch (error) {
+      console.warn("[Notification] Error calling notification service:", error);
       return false;
     }
-
-    return true;
-  } catch (error) {
-    console.warn("[Notification] Error calling notification service:", error);
-    return false;
   }
+
+  // Path 2: Custom webhook (Slack, Discord, email service, etc.)
+  const webhookUrl = process.env.NOTIFICATION_WEBHOOK_URL;
+  if (webhookUrl) {
+    try {
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title, content, timestamp: Date.now() }),
+      });
+      if (!response.ok) {
+        console.warn(`[Notification] Webhook failed (${response.status})`);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.warn("[Notification] Webhook error:", error);
+      return false;
+    }
+  }
+
+  // Path 3: Graceful no-op — log and return success
+  console.log(`[Notification] (no transport configured) title="${title}" content="${content.slice(0, 100)}..."`);
+  return true;
 }

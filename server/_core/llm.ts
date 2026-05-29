@@ -1,3 +1,14 @@
+/**
+ * LLM invocation layer.
+ *
+ * Supports two backends:
+ *   1. Manus Forge — uses BUILT_IN_FORGE_API_URL + BUILT_IN_FORGE_API_KEY
+ *   2. Standard OpenAI-compatible API — uses OPENAI_BASE_URL + OPENAI_API_KEY
+ *
+ * The env.ts module already bridges both: forgeApiUrl/forgeApiKey resolve from
+ * either set of env vars, so this module works unchanged on both Manus and Sevalla.
+ */
+
 import { ENV } from "./env";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
@@ -201,14 +212,20 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const resolveApiUrl = () =>
-  ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-    ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
-    : "https://forge.manus.im/v1/chat/completions";
+const resolveApiUrl = () => {
+  // Priority: BUILT_IN_FORGE_API_URL > OPENAI_BASE_URL > fallback
+  if (ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0) {
+    return `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`;
+  }
+  // Standard OpenAI endpoint
+  return "https://api.openai.com/v1/chat/completions";
+};
 
 const assertApiKey = () => {
   if (!ENV.forgeApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
+    throw new Error(
+      "LLM API key is not configured. Set BUILT_IN_FORGE_API_KEY or OPENAI_API_KEY.",
+    );
   }
 };
 
@@ -267,7 +284,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   } = params;
 
   const payload: Record<string, unknown> = {
-    model: "gemini-2.5-flash",
+    model: process.env.LLM_MODEL || "gemini-2.5-flash",
     messages: messages.map(normalizeMessage),
   };
 
@@ -281,9 +298,13 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   }
 
   payload.max_tokens = 32768;
-  payload.thinking = {
-    budget_tokens: 128,
-  };
+
+  // Only include thinking budget if using Forge/Gemini (not standard OpenAI)
+  if (ENV.forgeApiUrl && ENV.forgeApiUrl.includes("forge")) {
+    payload.thinking = {
+      budget_tokens: 128,
+    };
+  }
 
   const normalizedResponseFormat = normalizeResponseFormat({
     responseFormat,

@@ -1,0 +1,14 @@
+# Sevalla / Nixpacks build configuration
+# Sevalla uses Nixpacks to auto-detect and build Node.js applications
+
+[phases.setup]
+nixPkgs = ["nodejs_22"]
+
+[phases.install]
+cmds = ["corepack enable", "corepack prepare pnpm@9.12.0 --activate", "pnpm install --frozen-lockfile"]
+
+[phases.build]
+cmds = ["pnpm build"]
+
+[start]
+cmd = "node dist/index.js"

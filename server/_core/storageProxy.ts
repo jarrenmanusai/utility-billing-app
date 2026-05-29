@@ -9,6 +9,17 @@ export function registerStorageProxy(app: Express) {
       return;
     }
 
+    // S3 provider: redirect directly to the public URL
+    if (ENV.storageProvider === "s3") {
+      const publicUrl = ENV.s3PublicUrl
+        ? `${ENV.s3PublicUrl.replace(/\/+$/, "")}/${key}`
+        : `${ENV.s3Endpoint.replace(/\/+$/, "")}/${ENV.s3Bucket}/${key}`;
+      res.set("Cache-Control", "public, max-age=3600");
+      res.redirect(307, publicUrl);
+      return;
+    }
+
+    // Forge provider: get a signed URL and redirect
     if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
       res.status(500).send("Storage proxy not configured");
       return;
