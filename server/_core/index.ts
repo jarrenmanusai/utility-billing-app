@@ -151,15 +151,20 @@ async function startServer() {
     }),
   );
 
-  const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
+  // Sevalla injects PORT env var — app MUST listen on exactly that port.
+  // In development, fall back to scanning for an available port.
+  const assignedPort = parseInt(process.env.PORT || "3000");
+  const port =
+    process.env.NODE_ENV === "production"
+      ? assignedPort
+      : await findAvailablePort(assignedPort);
 
-  if (port !== preferredPort) {
-    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
+  if (port !== assignedPort) {
+    console.log(`Port ${assignedPort} is busy, using port ${port} instead`);
   }
 
-  server.listen(port, () => {
-    console.log(`[api] server listening on port ${port}`);
+  server.listen(port, "0.0.0.0", () => {
+    console.log(`[api] server listening on 0.0.0.0:${port}`);
   });
 }
 

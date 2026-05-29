@@ -27,7 +27,15 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 
-# Sevalla assigns PORT dynamically
+# Create a minimal package.json with type:module to avoid ESM warning
+RUN node -e "const p=require('./package.json');p.type='module';delete p.devDependencies;delete p.scripts;require('fs').writeFileSync('./package.json',JSON.stringify(p,null,2))"
+
+# Sevalla injects PORT env var at runtime — do NOT hardcode a port
+# EXPOSE is informational only; Sevalla routes traffic to $PORT
 EXPOSE 3000
+
+# Health check for Sevalla readiness/liveness probes
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-3000}/api/health || exit 1
 
 CMD ["node", "dist/index.js"]

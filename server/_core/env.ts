@@ -16,4 +16,7 @@ export const ENV = {
   s3AccessKey: process.env.S3_ACCESS_KEY ?? "",
   s3SecretKey: process.env.S3_SECRET_KEY ?? "",
   s3PublicUrl: process.env.S3_PUBLIC_URL ?? "", // Public base URL for serving files
+  // Cloudflare R2 (Sevalla Object Storage) requires path-style addressing.
+  // Set S3_FORCE_PATH_STYLE=true when using Sevalla/R2.
+  s3ForcePathStyle: (process.env.S3_FORCE_PATH_STYLE ?? "true").toLowerCase() === "true",
 };
